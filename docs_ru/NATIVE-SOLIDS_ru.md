@@ -1,28 +1,28 @@
-# Native solid modeling
+# Нативное моделирование тел
 
-## Workflows
+## Рабочие процессы
 
-Use **Solids**, not **Model**, for native B-rep objects. SOLIDBOX, SOLIDCYLINDER, SOLIDCONE, SOLIDSPHERE and SOLIDTORUS have numeric size and UCS-placement dialogs. Select closed profiles then SOLIDEXTRUDE or SOLIDREVOLVE. Inner selected profiles become holes. SOLIDLOFT follows profile selection order. SOLIDSWEEP takes a profile then a path. Source profiles are retained; a feature-history dependency graph is not yet provided.
+Используйте **Solids**, а не **Model**, для нативных объектов B-rep. SOLIDBOX, SOLIDCYLINDER, SOLIDCONE, SOLIDSPHERE и SOLIDTORUS имеют числовые диалоги размеров и размещения в UCS. Выберите замкнутые профили, затем SOLIDEXTRUDE или SOLIDREVOLVE. Внутренние выбранные профили становятся отверстиями. SOLIDLOFT следует порядку выбора профилей. SOLIDSWEEP принимает профиль, затем путь. Исходные профили сохраняются; граф зависимостей истории特征 пока не предоставляется.
 
-SOLIDUNION, SOLIDSUBTRACT and SOLIDINTERSECT operate in selection order and replace their operands atomically. SOLIDFILLET and SOLIDCHAMFER modify native edges, not triangle edges. SOLIDSHELL removes selected faces with signed thickness. SOLIDSECTION creates a native edge result against an arbitrary plane. A failed or empty result leaves the drawing unchanged.
+SOLIDUNION, SOLIDSUBTRACT и SOLIDINTERSECT работают в порядке выделения и атомарно заменяют операнды. SOLIDFILLET и SOLIDCHAMFER изменяют нативные рёбра, а не рёбра треугольников. SOLIDSHELL удаляет выбранные грани с знаковым утолщением. SOLIDSECTION создаёт нативный результат рёбер относительно произвольной плоскости. Неудачный или пустой результат оставляет чертеж без изменений.
 
-SOLIDINFO inspects the current transformed body. Fillet, chamfer and shell dialogs refresh topology before showing index tables. Indices are for the current serialized shape only; they are not persistent identifiers through future feature changes. Native solids support ordinary move/rotate/scale/mirror by retaining an authoritative affine matrix alongside the display mesh. Direct vertex manipulation is rejected until SOLIDDETACH is explicitly used.
+SOLIDINFO проверяет текущее преобразованное тело. Диалоги скругления, фаски и оболочки обновляют топологию перед отображением таблиц индексов. Индексы предназначены только для текущей сериализованной формы; они не являются постоянными идентификаторами через будущие изменения特征. Нативные тела поддерживают обычное перемещение/поворот/масштабирование/отражение, сохраняя авторитетную аффинную матрицу рядом с отображаемой сеткой. Прямое редактирование вершин отклоняется, пока не будет явно использовано SOLIDDETACH.
 
-STEPIMPORT accepts STEP, IGES or OCCT BREP through a local file picker. STEPEXPORT offers STEP, IGES, BREP and tessellated STL. STEP and IGES are exchanged in mm, with drawing-unit conversion. The native .kcad project keeps exact B-rep data; normal DXF export remains faceted 3DFACE rather than ACIS 3DSOLID.
+STEPIMPORT принимает STEP, IGES или OCCT BREP через локальный выбор файла. STEPEXPORT предлагает STEP, IGES, BREP и тесселированный STL. STEP и IGES обмениваются в мм с конвертацией единиц чертежа. Нативный проект .kcad хранит точные данные B-rep; обычный экспорт DXF остаётся facets 3DFACE вместо ACIS 3DSOLID.
 
-## Implementation and limits
+## Реализация и ограничения
 
-The plain JavaScript frontend stores an OCCT BREP stream, an affine transform, native topology/mass metadata and an independent display tessellation. The optional Python worker uses real CadQuery 2.8.0 / OCCT shape operations. The server accepts only same-origin localhost requests with the application header. A single native job runs at once. The worker accepts a structured operation allowlist, not Python expressions, executable paths or shell commands. Temporary files have fixed names in private temporary directories. The server enforces 64 MiB request/output and 60 seconds wall time. On platforms with `resource`, the worker also caps virtual address space, CPU time and output file size.
+Фронтенд на чистом JavaScript хранит поток OCCT BREP, аффинное преобразование, нативные метаданные топологии/массы и независимую отображаемую тесселяцию. Опциональный Python-воркер использует реальные операции CadQuery 2.8.0 / OCCT. Сервер принимает только запросы с того же origin (localhost) с заголовком приложения. Один нативный задача выполняется за раз. Воркер принимает структурированный список допустимых операций, а не выражения Python, исполняемые пути или команды оболочки. Временные файлы имеют фиксированные имена в приватных временных каталогах. Сервер ограничивает 64 МиБ запроса/ответа и 60 секунд реального времени. На платформах с `resource` воркер также ограничивает виртуальное адресное пространство, время CPU и размер выходного файла.
 
-Native BREP/file inputs are limited to 16 MiB; results to 20,000 edges/faces and 500,000 display vertices/triangles. These are safety limits, not performance promises. The engine is optional and is not shipped inside the standalone HTML or run by GitHub Pages. CadQuery/OCCT retain their own licenses; no proprietary SDK or font binary is bundled.
+Входные данные нативного BREP/файла ограничены 16 МиБ; результаты — 20 000 рёбер/граней и 500 000 отображаемых вершин/треугольников. Это пределы безопасности, а не обещания производительности. Движок является опциональным и не поставляется в составе автономного HTML или запускается GitHub Pages. CadQuery/OCCT сохраняют свои лицензии; проприетарный SDK или двоичные файлы шрифтов не включены.
 
-A B-rep kernel uses finite-precision curves, surfaces and tolerances. It is not exact symbolic arithmetic, an ACIS implementation, a complete SAT/SAB translator, or proof that every topology is valid for manufacturing. Imported IGES data may be disconnected faces rather than closed solids. Fillet and shell operations can fail on degenerate geometry or infeasible radii; such failures are reported rather than replaced by approximate meshes.
+Ядро B-rep использует конечноточные кривые, поверхности и допуски. Это не точная символьная арифметика, реализация ACIS, полный переводчик SAT/SAB и не доказательство того, что каждая топология пригодна для изготовления. Импортированные данные IGES могут быть отдельными гранями, а не замкнутыми телами. Операции скругления и оболочки могут завершиться неудачей на вырожденной геометрии или нереалистичных радиусах; такие ошибки сообщаются, а не заменяются приближёнными сетками.
 
-## Verification
+## Верификация
 
-`tests/kernel.test.py` exercises the real installed engine, including analytical volumes, native profiles/holes, loft/sweep, Boolean results, edge operations, shelling, STEP/BREP round trips, IGES surfaces, unit conversion and rejected requests. `tests/kernel-client.test.js` uses a clearly labeled synthetic transport fixture solely for persistence/transform/integrity checks. `tests/advanced.browser.py` exercises the real localhost bridge through browser dialogs and downloads; it does not mock native results. The complete verification runner executes all suites. In environments that prohibit browser navigation, run native browser checks in an ordinary local or CI environment; do not treat a blocked run as a pass.
+`tests/kernel.test.py` проверяет реальный установленный движок, включая аналитические объёмы, нативные профили/отверстия, loft/sweep, булевы результаты, операции с рёбрами, оболочку, STEP/BREP-циклы, поверхности IGES, конвертацию единиц и отклонённые запросы. `tests/kernel-client.test.js` использует явно помеченную синтетическую транспортную фикстуру исключительно для проверки持久ность/преобразования/целостности. `tests/advanced.browser.py` проверяет реальный HTTP-мост через диалоги и загрузки браузера; он не имитирует нативные результаты. Полное средство верификации выполняет все наборы. В средах, запрещающих навигацию в браузере, запускайте нативные проверки браузера в обычной локальной или CI-среде; не считайте заблокированный запуск успешным.
 
-Primary implementation references:
+Основные ссылки по реализации:
 - https://cadquery.readthedocs.io/en/latest/classreference.html
 - https://occt3d.com/dev/doc/overview/html/occt_user_guides__modeling_algos.html
 - https://pypi.org/project/cadquery/2.8.0/

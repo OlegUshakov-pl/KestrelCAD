@@ -1,18 +1,18 @@
-# Polar stretch actions
+# Полярные операции растяжения
 
-A native configurable block can change its reach and rotation together using a `polar-stretch` action. This extends Kestrel's ordered block evaluator; it does not decode or write proprietary DWG dynamic-block action records.
+Нативный настраиваемый блок может совместно изменять свою досягаемость и поворот с помощью действия `polar-stretch`. Это расширяет упорядоченный оценщик блоков Kestrel; он не декодирует и не записывает проприетарные записи действий динамических блоков DWG.
 
-## Authoring and editing
+## Создание и редактирование
 
-Select a configurable INSERT, run `BACTION` (Blocks → Add block action), and choose `polar-stretch`. Set the final-length expression, baseline length, rotation-angle expression, reference direction, center, rotation axis, and stretch-frame minimum/maximum. The existing `BPROPERTIES` form and inspector edit the driving parameters for each instance.
+Выберите настраиваемый INSERT, выполните `BACTION` (Blocks → Add block action) и выберите `polar-stretch`. Установите выражение конечной длины, базовую длину, выражение угла поворота, базовое направление, центр, ось вращения и минимум/максимум рамки растяжения. Существующая форма `BPROPERTIES` и инспектор редактируют управляющие параметры для каждого экземпляра.
 
-Expand **Polar stretch member modes** to choose how each target responds:
+Разверните **Polar stretch member modes** для выбора реакции каждой цели:
 
-- **Use stretch frame:** stretch eligible line/polyline vertices; move insertion anchors or fully enclosed conics. The frame is in definition-local XYZ at this action stage, before this action's rotation.
-- **Move whole:** apply the full reach displacement to the entire target, independent of the frame. Use this for a rigid native solid, spline, or other member that should move without changing its shape.
-- **Rotate only:** rotate the member but never apply the reach displacement.
+- **Use stretch frame:** растяжение допустимых вершин отрезков/полилиний; перемещение точек вставки или полностью заключённых коник. Рамка находится в локальных XYZ определения на этом этапе действия, до поворота этого действия.
+- **Move whole:** применение полного смещения досягаемости ко всей цели, независимо от рамки. Используйте для жёсткого нативного тела, сплайна или другого элемента, который должен перемещаться без изменения формы.
+- **Rotate only:** поворот элемента, но без применения смещения досягаемости.
 
-Every selected target rotates. Untargeted objects are unchanged. `moveOnly` and `rotateOnly` must be disjoint subsets of `targets`.
+Каждая выбранная цель поворачивается. Нецелевые объекты остаются без изменений. `moveOnly` и `rotateOnly` должны быть непересекающимися подмножествами `targets`.
 
 ```json
 {
@@ -32,35 +32,35 @@ Every selected target rotates. Untargeted objects are unchanged. `moveOnly` and 
 }
 ```
 
-Here `Reach` is a positive length parameter, with default 100, and `Angle` is a degree-valued angle parameter, with default 0. The baseline is the original definition's reach. Angle is the change from the definition orientation, not an angle relative to the last regeneration.
+Здесь `Reach` — положительный параметр длины по умолчанию 100, а `Angle` — угловой параметр в градусах по умолчанию 0. Базовая линия — досягаемость исходного определения. Угол — изменение от ориентации определения, а не угол относительно последней регенерации.
 
-The direction and rotation axis must be nonzero and perpendicular. They are normalized independently, so an axis of `[0, 2, 0]` is valid. Center and axes are independent of the camera and active UCS. The optional multiplier defaults to 1 and can be an expression, zero, or negative.
+Направление и ось вращения должны быть ненулевыми и перпендикулярными. Они нормализуются независимо, поэтому ось `[0, 2, 0]` является допустимой. Центр и оси независимы от камеры и активного UCS. Необязательный множитель по умолчанию равен 1 и может быть выражением, нулём или отрицательным числом.
 
-## Geometry semantics
+## Семантика геометрии
 
-The displacement before rotation is:
+Смещение до поворота:
 
 ```text
 delta = normalize(direction) * (evaluatedLength - baseLength) * multiplier
 ```
 
-Apply the appropriate displacement to frame-selected geometry, then rotate all target geometry about the supplied center and axis. This rotates the displacement into the new ray direction. For a line from `(0,0,0)` to `(100,0,0)`, with just the far endpoint in the frame, `Reach=150` and `Angle=90` produce a line ending at `(0,150,0)`.
+Примените соответствующее смещение к геометрии, выбранной рамкой, затем поверните всю целевую геометрию вокруг указанного центра и оси. Это поворачивает смещение в новое направление луча. Для отрезка от `(0,0,0)` до `(100,0,0)`, с только дальней точкой в рамке, `Reach=150` и `Angle=90` дают отрезок, оканчивающийся в `(0,150,0)`.
 
-Each evaluation starts from the unchanged definition. Earlier actions affect the geometry presented to the stretch frame; later actions affect its result. Array descendants retain the source target identity. Per-instance INSERT transformations apply after local regeneration, including unit scaling and affine reflection.
+Каждое вычисление начинается с неизменённого определения. Более ранние действия влияют на геометрию, представленную рамке растяжения; более поздние влияют на её результат. Потомки массива сохраняют идентичность исходной цели. Преобразования INSERT для каждого экземпляра применяются после локальной регенерации, включая масштабирование единиц и аффинное отражение.
 
-Lines and straight polylines use vertex membership. A bulged polyline segment retains its analytic arc when both endpoints move together or both remain fixed. Moving just one endpoint of a bulged segment rejects rather than retaining an incorrect bulge. Whole conics move without changing their radii/axes. Conic/frame classification uses analytic extrema and coordinate-boundary intersections, not display tessellation; a conic surrounding the frame without entering it is not incorrectly translated.
+Прямые и прямые полилинии используют принадлежность вершин. Сегмент полилинии с прогибом сохраняет свою аналитическую дугу, когда оба конца движутся вместе или оба остаются фиксированными. Перемещение только одного конца сегмента с прогибом отклоняется вместо сохранения некорректного прогиба. Целые коники перемещаются без изменения их радиусов/осей. Классификация коник/рамки использует аналитические экстремумы и пересечения координатных границ, а не отображаемую тесселяцию; коника, окружающая рамку без входа в неё, не перемещается некорректно.
 
-POINT, TEXT, MTEXT and nested INSERT use their insertion anchors for frame membership. Plain meshes move when all vertices are enclosed; overlapping mesh bounds reject partial deformation conservatively. Native B-rep bodies require an explicit rigid mode when the reach changes: their display mesh is never used as proof of native-solid enclosure. Native BREP bytes and shape remain unchanged while the authoritative placement follows the action. Other entity types require Move whole or Rotate only.
+POINT, TEXT, MTEXT и вложенные INSERT используют свои точки вставки для принадлежности к рамке. Обычные сетки перемещаются, когда все вершины заключены; перекрывающиеся границы сеток консервативно отклоняют частичную деформацию. Нативные тела B-rep требуют явного жёсткого режима при изменении досягаемости: их отображаемая сетка никогда не используется как доказательство вложенности в нативное тело. Байты и форма BREP остаются неизменными, пока авторитетное размещение следует действию. Другие типы объектов требуют «Перемещение целиком» или «Только вращение».
 
-The frame is a fixed axis-aligned local box, not an associative polygon or an automatic parameter grip. Changing only the angle, or a zero distance multiplier, performs rigid rotation and needs no stretch classification. Partial conic deformation, automatic native-face deformation, graphical parameter grips, and proprietary action-graph serialization are not supplied by this action.
+Рамка — это фиксированная осевыравненная локальная коробка, а не ассоциативный полигон или автоматическая параметрическая ручка. Изменение только угла или нулевой множитель расстояния выполняют жёсткий поворот и не требуют классификации растяжения. Частичная деформация коник, автоматическая деформация нативных граней, графические параметрические ручки и проприетарная сериализация графов действий этим действием не предоставляются.
 
-## Persistence and interchange
+##持久ность и обмен
 
-Native `.kcad` retains the action, reference frame, member modes and independent instance parameters. Definition-aware clipboard transfer preserves behavior. Successful changes form one undoable transaction. Invalid expressions, impossible modes, stale dialogs and unsupported deformations reject atomically.
+Нативный `.kcad` сохраняет действие, рамку, режимы элементов и независимые параметры экземпляров. Осведомлённый о определениях буфер обмена сохраняет поведение. Успешные изменения образуют одну отменяемую транзакцию. Невалидные выражения, невозможные режимы, устаревшие диалоги и неподдерживаемые деформации отклоняются атомарно.
 
-Standard DXF contains evaluated static BLOCK/INSERT variants and evaluated attribute text, not a recoverable dynamic evaluator. The exchange worker and editor use the same evaluator. Retain the native project as the configurable master. Source-preserving DXF export retains its existing compatibility guards.
+Стандартный DXF содержит вычисленные статические варианты BLOCK/INSERT и вычисленный текст атрибутов, а не восстанавливаемый оценщик динамических блоков. Воркер обмена и редактор используют тот же оценщик. Сохраняйте нативный проект как настраиваемый мастер. Экспорт с сохранением исходника сохраняет свои существующие ограничения совместимости.
 
-## Verification
+## Верификация
 
 ```sh
 node tests/polar-stretch.test.js
@@ -70,6 +70,6 @@ python3 tests/polar-stretch-native.test.py
 python3 tests/polar_stretch_interop.py
 ```
 
-The suites include numerical geometry and rollback checks, real UI authoring/property/clipboard/download/worker workflows, actual OCCT centroid and STEP checks, and independent ezdxf audits requiring zero errors and zero repairs. All suites are discovered automatically by `tools/verify.py`. Hardware WebGPU execution and native DWG codecs remain separate validation paths.
+Наборы включают числовые проверки геометрии и отката, реальные рабочие процессы UI создания/свойств/буфера обмена/загрузок/воркера, фактические проверки OCCT и STEP, а также независимые аудиты ezdxf, требующие нуля ошибок и нуля исправлений. Все наборы автоматически обнаруживаются `tools/verify.py`. Аппаратное выполнение WebGPU и нативные кодеки DWG остаются отдельными путями верификации.
 
-Primary workflow references: [Autodesk polar-stretch actions](https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-Core/files/GUID-D48A291E-3085-4B16-B969-20CBD000501B.htm) and [BACTION member selection](https://help.autodesk.com/cloudhelp/2022/ENG/AutoCAD-Core/files/GUID-98CCB318-60F6-46C9-8F90-C2B8614553C4.htm). The schema, explicit rigid-member mode, validation, and geometry algorithms here are original Kestrel implementations.
+Основные рабочие документы: [полярные действия Autodesk](https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-Core/files/GUID-D48A291E-3085-4B16-B969-20CBD000501B.htm) и [выбор элементов BACTION](https://help.autodesk.com/cloudhelp/2022/ENG/AutoCAD-Core/files/GUID-98CCB318-60F6-46C9-8F90-C2B8614553C4.htm). Схема, явный жёсткий режим элементов, проверка и алгоритмы геометрии здесь являются оригинальными реализациями Kestrel.

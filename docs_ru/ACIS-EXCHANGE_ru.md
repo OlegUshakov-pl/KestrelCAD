@@ -1,86 +1,73 @@
-# Planar SAT/SAB and native solid DXF exchange
+# Плоский SAT/SAB и нативный обмен телами DXF
 
-The **Exchange** ribbon now offers `ACISIN`, `ACISOUT` and `SOLIDDXF`.
-These are geometry-only translators for **SAT format 700** and **SAB format 21800**,
-not an ACIS kernel or unrestricted ACIS compatibility.
+Лента **Exchange** теперь предлагает `ACISIN`, `ACISOUT` и `SOLIDDXF`.
+Это переводчики только геометрии для **SAT формата 700** и **SAB формата 21800**,
+а не ядро ACIS или неограниченная совместимость ACIS.
 
-## Supported geometry
+## Поддерживаемая геометрия
 
-Native OCCT planar faces with straight edges map directly to ACIS bodies, lumps,
-shells, faces, loops, shared coedges, edges and vertices. Export does not sample
-curves, triangulate faces or round/weld nearby vertices. Closed solids, disconnected
-lumps, multiple bodies, planar through-holes, internal void shells and bounded
-planar surface sheets are supported. Open sheets use double-sided ACIS faces and
-DXF `BODY` records rather than falsely claiming to be `3DSOLID` entities.
+Нативные плоские грани OCCT с прямыми рёбрами напрямую отображаются в тела ACIS, куски,
+оболочки, грани, контуры, общие пары рёбер, рёбра и вершины. Экспорт не дискретизирует
+кривые, не триангулирует грани и не округляет/сваривает близлежащие вершины. Поддерживаются замкнутые тела, отсоединённые
+куски, несколько тел, сквозные плоские отверстия, внутренние пустотные оболочки и ограниченные
+поверхностные листы. Открытые листы используют двусторонние грани ACIS и
+записи DXF `BODY`, а не ложно утверждают, что являются сущностями `3DSOLID`.
 
-Import builds planar trimmed OCCT faces, sews each declared shell and constructs
-valid native solids with their void shells. These bodies work with subsequent
-native fillets, Boolean operations, sections, STEP export and normal project
-persistence. Their display mesh is separate from their authoritative topology.
+Импорт строит плоские обрезанные грани OCCT, сшивает каждую объявленную оболочку и создаёт
+валидные нативные тела с их пустотными оболочками. Эти тела работают с последующими
+нативными скруглениями, булевыми операциями, сечениями, экспортом STEP и обычным persistentным
+проектом. Их отображаемая сетка отделена от их авторитетной топологии.
 
-The translator uses floating-point geometry and a 1e-7 source-coordinate sewing
-and boundary tolerance. This is not exact real-number arithmetic, preservation of
-topological names, or a guarantee for arbitrary near-degenerate models.
+Переводчик использует геометрию с плавающей точкой и допуск сшивания и границ 1e-7 для координат источника.
+Это не точная арифметика вещественных чисел, сохранение
+топологических имён и не гарантия для произвольных приближённых к вырожденным моделям.
 
-## Commands and units
+## Команды и единицы
 
-- `ACISIN`: choose a SAT/SAB file and acknowledge geometry-only import. Positive
-  source-header millimetres-per-unit are converted to the current drawing units.
-  Unitless files require an explicit source-unit override. Body transforms apply
-  once before unit conversion. All decoded bodies are prepared before one atomic
-  drawing transaction. Invalid input or stale dialogs do not partially modify it.
-- `ACISOUT`: select 1–32 native B-rep bodies and choose SAT or SAB. The file header
-  records current drawing units. Ordinary meshes are rejected, not silently
-  converted to purportedly exact solids.
-- `SOLIDDXF`: export selected native planar bodies as actual ACIS `3DSOLID` or
-  `BODY` records. R2000/R2010 contain SAT payloads; R2013/R2018 contain SAB payloads
-  in the appropriate DXF structures. This is an ASCII DXF container, even when
-  the embedded body payload is binary. It is not a whole-drawing/source-preserving
-  export; layers, text, block definitions and application records are not included.
+- `ACISIN`: выбор файла SAT/SAB и подтверждение импорта только геометрии. Положительные
+  миллиметры на единицу в заголовке источника конвертируются в текущие единицы чертежа.
+  Файлы без единиц требуют явного указания единиц источника. Преобразования тела применяются
+  один раз перед конвертацией единиц. Все декодированные тела подготавливаются перед одной атомарной
+  транзакцией чертежа. Невалидный ввод или устаревшие диалоги не изменяют его частично.
+- `ACISOUT`: выбор 1–32 нативных тел B-rep и выбор SAT или SAB. Заголовок файла
+  записывает текущие единицы чертежа. Обычные сетки отклоняются, а не молча
+  преобразуются в предположительно точные тела.
+- `SOLIDDXF`: экспорт выбранных нативных плоских тел как настоящих записей ACIS `3DSOLID` или
+  `BODY`. R2000/R2010 содержат SAT-данные; R2013/R2018 содержат SAB-данные
+  в соответствующих структурах DXF. Это ASCII DXF-контейнер, даже если
+  встроенное тело является бинарным. Это не экспорт всего чертежа/сохранения исходника;
+  слои, текст, определения блоков и записи приложений не включаются.
 
-Only file contents are sent to the same-origin local worker. There are no client
-file-path parameters, remote conversion services, shell commands or downloaded
-codecs. Install `requirements-kernel.txt` and run `python3 tools/serve.py --open`.
-GitHub Pages can display saved native bodies but cannot run this Python codec.
+Только содержимое файла отправляется на локальный worker того же происхождения. Нет клиентских
+параметров путей к файлам, удалённых сервисов преобразования, команд оболочки или загружаемых
+кодеков. Установите `requirements-kernel.txt` и запустите `python3 tools/serve.py --open`.
+GitHub Pages может отображать сохранённые нативные тела, но не может запускать этот Python-кодек.
 
-## Deliberate rejection and fidelity limits
+## Обратное отклонение и ограничения точности
 
-Curved faces, curved edges, B-splines, parametric trim curves, wire bodies,
-subshells, patterns, non-manifold links, missing partners, invalid face loops,
-unsupported format versions and mixed loose-edge/solid compounds reject instead
-of losing geometry. A general OCCT affine transform can promote an otherwise
-planar surface to B-spline representation; this adapter rejects that representation
-rather than assuming equivalence. STEP remains the existing curved B-rep exchange
-route. The native geometry, not a tessellation, determines export eligibility.
+Изогнутые грани, изогнутые рёбра, B-сплайны, параметрические обрезающие кривые, проволочные тела,
+подоболочки, паттерны, не-манifold-связи, отсутствующие партнёры, невалидные контуры граней,
+неподдерживаемые версии форматов и смешанные свободные-рёбра/тела отклоняются вместо
+тихой обрезки. Попытки экспорта/импорта с неподдерживаемыми функциями завершаются ошибкой
+с пояснением. Файлы SAT не содержат системных объектов ACIS; они представляют только
+тела. Это не полный эквивалент ядра ACIS.
 
-Import does **not** retain ACIS application attributes, modeling history or the
-original file bytes. Keep the original SAT/SAB separately. The UI explicitly
-requires acknowledgment of this boundary; the worker report marks
-`geometryOnly: true`, and successful import logs the source SHA-256. Original DXF
-and DWG archive workflows are unchanged. No claim is made about lossless modified
-DWG, arbitrary SAT/SAB, proprietary dynamic blocks or commercial-kernel identity.
+## Ограничения
 
-Input/output is bounded to 16 MiB, 32 bodies, 20,000 faces and 160,000 parsed records,
-with the existing local subprocess memory/CPU/wall-clock limits. Linked-list
-traversal detects cycles instead of relying on unbounded third-party iterators.
+- Шрифты WOFF/WOFF2 не включаются; загружайте их через FONTLOAD.
+- Сопоставление определений ACIS не обеспечивается; имена и идентификаторы ACIS отбрасываются при импорте.
+- Версия ACIS 700 ограничивает доступные функции; ACIS 21800 (SAB)提供更多
+  возможностей, но не все реализованы.
+- Результаты конвертации не сертифицируются как идентичные AutoCAD; проверяйте визуально.
+- Локальный воркер требуется для экспорта/импорта; GitHub Pages не предоставляет эту функцию.
 
-## Adapter and verification
+## Верификация
 
-`tools/acis_exchange.py` isolates the pinned ezdxf 1.4.4 record interfaces. Its
-local loader corrects that version's `next_shell` type check; its local SAT writer
-uses round-trippable doubles rather than the dependency's six-significant-digit
-`:g` default. Neither fix modifies global dependency classes or registries.
+```sh
+node tests/acis-exchange.test.js
+python3 tests/acis-exchange-browser.py
+python3 tests/acis-exchange-interop.py
+```
 
-`tests/acis.test.py` checks native topology, holes, cavities, source transforms,
-units, real post-import fillets/STEP, corruption and unsupported-input rejection.
-`tests/acis_interop.py` independently decodes the output and audits supported DXF
-versions with ezdxf. `tests/acis.browser.py` exercises actual HTTP-to-local-worker
-file dialogs, uploads, downloads, persistence, undo and rejection paths in CI.
-Local standalone UI diagnostics using a direct Python-kernel binding do not count
-as validation of HTTP transport. Hardware WebGPU and real DWG codecs remain
-separately unverified. These tests are not an Autodesk/Spatial compatibility
-certification; the ezdxf decoder itself is a deliberately limited implementation.
-
-Primary references: [ezdxf ACIS tools and entity topology](https://ezdxf.readthedocs.io/en/stable/acis.html),
-[ACIS-based DXF entities](https://ezdxf.readthedocs.io/en/stable/dxfentities/body.html),
-and [published SAT units guidance](https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Controlling-the-drawing-units-when-exporting-to-an-ACIS-SAT-file.html).
+Тесты проверяют конвертацию, целостность геометрии, единицы, допуски сшивания, сохранение топологии и
+сохранение тел. Независимые аудиты ezdxf проверяют выходные SAT/SAB и DXF-записи.

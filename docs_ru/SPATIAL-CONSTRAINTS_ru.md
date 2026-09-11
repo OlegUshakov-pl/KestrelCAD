@@ -1,32 +1,32 @@
-# Spatial constraints and rigid assembly mates
+# Пространственные ограничения и жёсткие связи сборки
 
-The **Assembly** ribbon operates in true world XYZ. These equations are not projected onto the active drafting plane. The browser-only numerical library is `Kestrel.SpatialConstraints` in `src/spatial-constraints.js` and has no additional runtime dependency.
+Лента **Assembly** работает в истинных мировых XYZ. Эти уравнения не проецируются на активную плоскость черчения. Библиотека числовых вычислений для браузера — `Kestrel.SpatialConstraints` в `src/spatial-constraints.js` — не имеет дополнительных зависимостей рантайма.
 
-## Working geometry and relationships
+## Рабочая геометрия и связи
 
-POINT coordinates and LINE / straight POLYLINE vertices are free 3D variables. MESH entities (including retained native OpenCascade bodies) and INSERT references have six rigid pose variables: three translations and three rotation-vector components. An INSERT's shared definition is not rewritten. Moving a native body composes its authoritative BREP transform and its display mesh together; native integrity validation remains enabled.
+Координаты POINT и вершины LINE/прямых POLYLINE являются свободными 3D-переменными. Объекты MESH (включая сохранённые нативные тела OpenCascade) и ссылки INSERT имеют шесть жёстких переменных позы: три трансляции и три компонента вектора вращения. Общее определение INSERT не перезаписывается. Перемещение нативного тела составляет его авторитетное преобразование BREP и отображаемую сетку вместе; проверка целостности нативных данных остаётся включённой.
 
-Relationships include coincidence; Euclidean distance; signed X/Y/Z distances; fixed points and entities; parallel, same/opposite direction, perpendicular and 0–180 degree angles; equal lengths and length ratios; point-on-line; signed point-to-plane distance; midpoint; and symmetry through a plane. Assembly relations compose these equations:
+Связи включают совпадение; евклидово расстояние; знаковое расстояние по X/Y/Z; фиксированные точки и объекты; параллельность, одинаковое/противоположное направление, перпендикулярность и углы 0–180 градусов; равные длины и соотношения длин; точка на линии; знаковое расстояние от точки до плоскости; середина и симметрия через плоскость. Связи сборки составляют эти уравнения:
 
-| Relation | Equation meaning | Remaining DOF for one free rigid body against a fixed nondegenerate datum |
+| Связь | Значение уравнения | Оставшиеся DOF для одного свободного жёсткого тела относительно фиксированного невырожденного datums |
 |---|---|---|
-| Plane mate | Opposed normals and signed plane offset | Two translations and one spin |
-| Coaxial | Collinear axes, parallel or antiparallel | Axial translation and rotation |
-| Hinge | Coincident datum origins and same axis direction | One rotation |
-| Slider | Aligned full frames and origin on datum axis | One translation |
-| Fastened | Aligned full frames and coincident origins | Zero |
+| Плоскостное сопряжение | Противоположные нормали и знаковое смещение плоскости | Две трансляции и одно вращение |
+| Соосность | Коллинеарные оси, параллельные или антипараллельные | Осевая трансляция и вращение |
+| Шарнир | Совпадение начал datums и одинаковое направление оси | Одно вращение |
+| Ползунок | Совпадение полных рамок и начало на оси datums | Одна трансляция |
+| Жёсткое крепление | Совпадение полных рамок и начал координат | Ноль |
 
-Those DOF counts describe the stated isolated configuration, not every possible assembly. Conflicting, repeated or degenerate geometry can change numerical rank. A `parallel` relation does not choose between parallel and antiparallel; choose `same-direction` or `opposed` when orientation matters.
+Эти подсчёты DOF описывают указанную изолированную конфигурацию, а не каждую возможную сборку. Конфликтующие, повторяющиеся или вырожденные геометрии могут изменять численный ранг. Связь `parallel` не выбирает между параллельностью и антипараллельностью; выбирайте `same-direction` или `opposed`, когда ориентация важна.
 
-## Authoring
+## Создание
 
-`3DCONSTRAINT`, `3DMATE`, and `3DDIM` open a relationship form. Select drawing entities or fixed world datums. Flexible geometry accepts start/end/mid/numeric point anchors and a polyline segment index. Rigid bodies accept a local XYZ datum or a `vertex:index` mesh vertex. Local axes follow the body's retained frame. World datums remain independent of the current UCS. Mating frames require two independent axes.
+`3DCONSTRAINT`, `3DMATE` и `3DDIM` открывают форму связи. Выбирайте объекты чертежа или фиксированные мировые datums. Гибкая геометрия принимает якорные точки начала/конца/середины/числовые и индекс сегмента полилинии. Жёсткие тела принимают локальный XYZ-datum или `vertex:index` вершину сетки. Локальные оси следуют сохранённой рамке тела. Мировые datums остаются независимыми от текущего UCS. Рамки сопряжения требуют две независимые оси.
 
-`3DFIX` fixes selected supported objects in one history transaction. `3DPARAMETERS` edits named arithmetic expressions using the same safe expression parser as planar sketches, with an independent parameter namespace. Length expressions have saved physical units; angular expressions are degrees and length ratios are dimensionless. `3DCONSTRAINTS` edits values, suppresses/deletes relationships, or disables solving without losing the graph. `3DSOLVE` explicitly solves; normal document transactions enforce active relationships automatically. `3DDOF` reports actual rank, residuals and local freedoms without modifying geometry.
+`3DFIX` фиксирует выбранные поддерживаемые объекты в одной транзакции истории. `3DPARAMETERS` редактирует именованные арифметические выражения с помощью того же безопасного парсера выражений, что и плоские эскизы, с независимым пространством имен параметров. Выражения длин имеют сохранённые физические единицы; угловые выражения — в градусах, а соотношения длин — безразмерные. `3DCONSTRAINTS` редактирует значения, подавляет/удаляет связи или отключает решение без потери графа. `3DSOLVE` явно решает; обычные транзакции документа автоматически применяют активные связи. `3DDOF` сообщает о фактическом ранге, невязках и локальных свободах без изменения геометрии.
 
-`3DASSEMBLY` creates an editable lift example: a fixed base, a rigid slider and a named `Lift` driving distance. Change the expression from 25 to 40 to move the carrier without deforming either mesh. This example deliberately uses meshes; it does not impersonate native BREP data.
+`3DASSEMBLY` создаёт редактируемый пример подъёмника: фиксированное основание, жёсткий ползунок и именованное расстояние `Lift`. Измените выражение с 25 на 40 для перемещения носителя без деформации какой-либо из сеток. Этот пример намеренно использует сетки; он не подражает нативным данным BREP.
 
-## Native library example
+## Пример нативной библиотеки
 
 ```js
 const d = new Kestrel.Drawing('Space frame');
@@ -41,33 +41,33 @@ Kestrel.SpatialConstraints.add(d, {
 console.log(d.byId.get(p.id).position); // [10, 20, 50], within numerical tolerance
 ```
 
-Rigid references use `{entity: id, local: [x,y,z], axis: [0,0,1], xaxis: [1,0,0]}`. World datums use `{world: [x,y,z], axis: [nx,ny,nz]}`. A rigid entity's `constraintFrame` maps local datums to world space. It is initialized when the entity participates and composed through ordinary transforms. Mesh vertex anchors refer to current vertex indices, not persistent topological names. Native topology-changing operations normally replace entity IDs; deletion removes the corresponding equations and undo restores them.
+Жёсткие ссылки используют `{entity: id, local: [x,y,z], axis: [0,0,1], xaxis: [1,0,0]}`. Мировые datums используют `{world: [x,y,z], axis: [nx,ny,nz]}`. `constraintFrame` жёсткого объекта отображает локальные datums в мировое пространство. Он инициализируется, когда объект участвует, и составляется через обычные преобразования. Якорные точки вершин сетки ссылаются на текущие индексы вершин, а не на постоянные топологические имена. Нативные операции, изменяющие топологию, обычно заменяют ID объектов; удаление удаляет соответствующие уравнения, а отмена восстанавливает их.
 
-## Persistence, editing and failure behavior
+##持久ность, редактирование и поведение при ошибках
 
-The graph is stored in `production.spatial`, schema version 1, with parameters, constraints, units and enable state. Native save/load and undo/redo retain frames and solved geometry. An unsatisfied/invalid edit rolls back both equations and geometry; a diagnostic-only solve never applies a candidate. Stale UI dialogs reject after another edit or document switch. Locked layer geometry is constant during solving.
+Граф хранится в `production.spatial`, версия схемы 1, с параметрами, ограничениями, единицами и состоянием включения. Нативное сохранение/загрузка и отмена/повтор сохраняют рамки и решённую геометрию. Неудовлетворённая/невалидная правка откатывает как уравнения, так и геометрию; решение только для диагностики никогда не применяет кандидата. Устаревшие диалоги UI отклоняются после другой правки или переключения документа. Геометрия на заблокированных слоях постоянна во время решения.
 
-Unit conversion updates fixed targets, world datums and rigid frames while preserving the physical meaning of saved driving parameters. Copying a complete constrained selection retains the graph, remaps IDs, renames colliding parameters and transforms world/rigid datums and signed measurement axes. References to uncopied entities are omitted with a warning. Nonuniform/skewed clipboard transforms explicitly omit equations; they retain the transformed geometry. Ordinary compatibility DXF contains evaluated geometry, **not this native graph**. Imported source-preserving export rejects changed production definitions rather than claiming equivalent DWG constraint records.
+Конвертация единиц обновляет фиксированные цели, мировые datums и жёсткие рамки, сохраняя физический смысл сохранённых управляющих параметров. Копирование полного ограниченного выделения сохраняет граф, переназначает ID, переименовывает конфликтующие параметры и преобразует мировые/жёсткие datums и знаковые оси измерений. Ссылки на нескопированные объекты отбрасываются с предупреждением. Неравномерные/скошенные преобразования буфера обмена явно исключают уравнения; они сохраняют преобразованную геометрию. Обычный совместимый DXF содержит вычисленную геометрию, **а не этот нативный граф**. Импортирующий экспорт с сохранением исходника отклоняет изменённые определения вместо претензии на эквивалентные записи ограничений DWG.
 
-The planar and spatial solvers may coexist on disjoint free geometry. Sharing a free entity between active independent systems is rejected instead of allowing one solver to silently overwrite the other. Suppress/disable one system or separate the drawings. Shared locked references remain constant.
+Плоский и пространственный решатели могут сосуществовать на непересекающейся свободной геометрии. Совместное использование свободного объекта между активными независимыми системами отклоняется вместо молчаливой перезаписи одного решателя другим. Подавьте/отключите одну систему или разделите чертежи. Общие заблокированные ссылки остаются постоянными.
 
-## Numerical scope and limits
+## Числовая область и ограничения
 
-Damped least squares uses central-difference Jacobians, normalized world coordinates, fixed-entity elimination, pivoted dense solves and numerical rank diagnostics. Deterministic small seeds handle stationary distance/angle configurations. A solution is applied only after all active residuals converge. Failure to converge is **not proof** that an arrangement is globally impossible.
+Затухающие методы наименьших квадратов используют якобианы центральных разностей, нормализованные мировые координаты, устранение фиксированных объектов, повёрнутые плотные решения и диагностику численного ранга. Детерминированные малые начальные значения обрабатывают стационарные конфигурации расстояния/угла. Решение применяется только после сходимости всех активных остатков. Несходимость **не является доказательством** того, что конфигурация глобально невозможна.
 
-Default budgets: 192 free scalars, 768 referenced scalar/residual components, 256 constraints, 128 parameters, 100 iterations and 1.5 seconds. Residual threshold is 1e-9 in normalized length/direction coordinates; rank threshold is 1e-7. DOF is local and tolerance-dependent. Vector equations have inherently redundant components, so `redundantEquations` is not a count of unnecessary user constraints.
+Стандартные бюджеты: 192 свободных скаляра, 768 скалярных/остаточных компонентов, 256 ограничений, 128 параметров, 100 итераций и 1,5 секунды. Порог остатка — 1e-9 в нормализованных координатах длины/направления; порог ранга — 1e-7. DOF является локальным и зависит от допуска. Векторные уравнения имеют избыточные по природе компоненты, поэтому `redundantEquations` не является подсчётом ненужных пользовательских ограничений.
 
-This is not a general deformable-solid, NURBS-surface, spline or flexible-conic solver. Arbitrary shell contacts, collision avoidance, dynamics, kinematic animation, inferred face mates, persistent topological naming and proprietary DWG constraint graph compatibility are not implemented. It is a numerical solver, not exact arithmetic or a manufacturing certification.
+Это не общий решатель деформируемых тел, поверхностей NURBS, сплайнов или гибких коник. Произвольные контакты оболочек, избежание столкновений, динамика, кинематическая анимация, неявные связи граней, постоянное топологическое именование и совместимость с графом ограничений DWG не реализованы. Это численный решатель, а не точная арифметика или сертификация изготовления.
 
-## Verification
+## Верификация
 
-- `node tests/spatial.test.js`: numerical geometry, dimensional expressions, mates/DOF, rigid poses, conflicting edits, locked/suppressed/disabled states, units, clipboard, native persistence and invalid-input budgets.
-- `python3 tests/spatial-native.test.py`: **actual OCCT** native bodies transformed by the JS solver, measured by the native engine, genuine STEP round trips, subsequent native fillets, undo and native mesh integrity.
-- `python3 tests/spatial.browser.py`: real editor ribbon/dialog/clipboard/units/download/history workflows, not mocked DOM controls.
+- `node tests/spatial.test.js`: числовая геометрия, размерные выражения, связи/DOF, жёсткие позы, конфликтующие правки, заблокированные/подавленные/отключённые состояния, единицы, буфер обмена, нативная持久ность и бюджеты невалидного ввода.
+- `python3 tests/spatial-native.test.py`: **реальные тела OCCT**, преобразованные решателем JS, измерённые нативным движком, подлинные STEP-циклы, последующие нативные скругления, отмена и целостность нативной сетки.
+- `python3 tests/spatial.browser.py`: реальные рабочие процессы редактора: лента/диалог/буфер обмена/единицы/загрузки/история, а не имитированные элементы управления DOM.
 
-Primary background references: [SolveSpace reference](https://solvespace.com/ref.pl) and [CadQuery assembly constraint documentation](https://cadquery.readthedocs.io/en/latest/assy.html). This library is an original implementation; those packages are not invoked by its solver.
+Основные справочные материалы: [справочник SolveSpace](https://solvespace.com/ref.pl) и [документация ограничений сборки CadQuery](https://cadquery.readthedocs.io/en/latest/assy.html). Эта библиотека является оригинальной реализацией; эти пакеты не вызываются её решателем.
 
-## Joint travel
+## Перемещение суставов
 
-Hinge and slider mates now accept bounded travel and expression-driven positions.
-See [joint limits, coordinate conventions and diagnostics](JOINT-LIMITS.md).
+Связи шарнира и ползунка теперь принимают ограниченное перемещение и позиции, управляемые выражениями.
+См. [ограничения суставов, соглашения координат и диагностику](JOINT-LIMITS.md).

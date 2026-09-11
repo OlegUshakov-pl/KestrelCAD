@@ -1,99 +1,100 @@
-# Original drawings and source-preserving DXF
+# Оригинальные чертежи и DXF с сохранением исходника
 
-The **Exchange** ribbon separates three different operations: restore the unedited
-original, save supported edits into retained DXF records, and explicitly regenerate
-a compatibility drawing. These operations must not be confused with unrestricted
-lossless editing of arbitrary CAD files.
+Лента **Exchange** разделяет три различные операции: восстановление неотредактированного
+оригинала, сохранение поддерживаемых правок в сохранённых записях DXF и явная регенерация
+совместимого чертежа. Эти операции не следует путать с неограниченным
+беспотерижным редактированием произвольных файлов CAD.
 
-## Commands
+## Команды
 
-| Command | Behavior |
+| Команда | Поведение |
 |---|---|
-| `SOURCEINFO` | Show retained file, byte count, DXF version/encoding, record count and native editing state. |
-| `SOURCEORIGINAL` | Download the exact original bytes, **without subsequent edits**. |
-| `DXFSAVE` | Patch supported edits into the retained ASCII or binary DXF. Refuse unsupported changes. |
-| `DXFOUT` | Use `DXFSAVE` for an imported drawing; normal compatibility export for a new native drawing. |
-| `DXFEXPORT` | Regenerate supported content as ASCII DXF. Imported drawings require an explicit loss-of-content acknowledgement. |
-| `DXFBINARY` | Regenerate supported content as actual binary DXF, with the same acknowledgement for imported drawings. |
+| `SOURCEINFO` | Отображение сохранённого файла, количества байтов, версии/кодировки DXF, количества записей и состояния нативного редактирования. |
+| `SOURCEORIGINAL` | Загрузка точных исходных байтов, **без последующих правок**. |
+| `DXFSAVE` | Исправление поддерживаемых правок в сохранённом ASCII или бинарном DXF. Отказ от неподдерживаемых изменений. |
+| `DXFOUT` | Использование `DXFSAVE` для импортированного чертежа; обычный совместимый экспорт для нового нативного чертежа. |
+| `DXFEXPORT` | Регенерация поддерживаемого содержимого как ASCII DXF. Импортированные чертежи требуют явного подтверждения потери содержимого. |
+| `DXFBINARY` | Регенерация поддерживаемого содержимого как настоящего бинарного DXF, с тем же подтверждением для импортированных чертежей. |
 
-Opening DXF as a separate drawing retains the entire file: sections, objects,
-application metadata, proxy content, paper-space records, handles, line endings,
-encoding and uninterpreted data. These records do not automatically become editable
-or visible native objects. Inserting a drawing into another document transfers
-supported editable content, **not** the original-source container; the UI reports
-that distinction.
+Открытие DXF как отдельного чертежа сохраняет весь файл: секции, объекты,
+метаданные приложений, прокси-содержимое, записи пространства бумаги, хэндлы, концы строк,
+кодировку и неинтерпретированные данные. Эти записи не автоматически становятся редактируемыми
+или видимыми нативными объектами. Вставка чертежа в другой документ переносит
+поддерживаемое редактируемое содержимое, **а не** контейнер исходного источника; UI сообщает
+об этом различии.
 
-The immutable original and semantic import baseline are stored once in `.kcad`,
-outside undo snapshots. Undo/redo retains this archive. Reopening a saved native
-project restores it. `SOURCEORIGINAL` returns byte-identical source data even after
-native edits. When a parser caller supplies a JavaScript string instead of a byte
-buffer, the original *file* encoding is not recoverable; UTF-8 bytes of that supplied
-string are retained and this provenance is recorded.
+Неизменяемый оригинал и базовая линия семантического импорта хранятся один раз в `.kcad`,
+за пределами снимков отмены. Отмена/повтор сохраняет этот архив. Повторное открытие сохранённого нативного
+проекта восстанавливает его. `SOURCEORIGINAL` возвращает байт-идентичные данные источника даже после
+нативных правок. Когда вызывающий модуль парсера предоставляет строку JavaScript вместо буфера
+байтов, исходная *файловая* кодировка не восстанавливается; UTF-8 байты этой
+предоставленной строки сохраняются, и это происхождение записывается.
 
-## Guarded editing
+## Защищённое редактирование
 
-Supported one-to-one model-space edits cover LINE, POINT, CIRCLE, ARC, ELLIPSE,
-straight/bulged LWPOLYLINE, control-point SPLINE and single-line TEXT. Existing entity
-handles and owner references are retained. Unknown groups and protected 102 control
-blocks/XDATA are copied, not interpreted as ordinary geometry. Geometry fields are
-patched within their correct subclass sections. Supported object appearance,
-existing-layer properties, and an existing insertion-unit header can also change.
+Поддерживаемые одно-к-одному правки модельного пространства охватывают LINE, POINT, CIRCLE, ARC, ELLIPSE,
+прямые/прогнутые LWPOLYLINE, сплайны с контрольными точками и однострочный TEXT. Существующие хэндлы объектов
+и ссылки владельцев сохраняются. Неизвестные группы и защищённые 102 контрольные
+блоки/XDATA копируются, а не интерпретируются как обычная геометрия. Геометрические поля
+исправляются в их правильных подклассных секциях. Поддерживаемый внешний вид объектов,
+свойства существующих слоёв и существующий заголовок единиц вставки также могут изменяться.
 
-New simple entities receive unique handles and the original model-space owner.
-Deletion checks retained handle references before removing a record. All output is
-prepared before download; a failed export changes neither the source archive nor
-the native drawing. Native editing and DXF exporting have separate validity checks.
+Новые простые объекты получают уникальные хэндлы и исходного владельца модельного пространства.
+Удаление проверяет сохранённые ссылки на хэндлы перед удалением записи. Весь вывод
+подготавливается перед загрузкой; неудачный экспорт не изменяет ни архив исходника, ни
+нативный чертёж. Нативное редактирование и экспорт DXF имеют отдельные проверки валидности.
 
-The exporter deliberately refuses block-definition/style/layout/constraint changes,
-new or renamed layers, ambiguous or compound record mappings, unsupported native
-fields, type-changing edits, unsafe referenced deletions, width/vertex-ID polylines,
-source-thickness geometry, and fit-point/tangent-constrained spline regeneration.
-Legacy version limits are checked rather than inserting unsupported modern fields.
-A native project can still save such edits together with the untouched original;
-explicit compatibility export can regenerate the supported subset.
+Экспортёр намеренно отказывается от изменений определений блоков/стилей/макетов/ограничений,
+новых или переименованных слоёв, неоднозначных или составных сопоставлений записей, неподдерживаемых нативных
+полей, правок, изменяющих тип, небезопасных удалений ссылок, полилиний ширина/ID-вершин,
+геометрии исходной толщины и регенерации сплайнов с ограничениями касательных/точек соприкосновения.
 
-**Unchanged opaque metadata is not recomputed.** Proprietary reactors, proxy caches
-and application-specific relationships may require the originating application to
-reevaluate them. Byte retention does not prove semantic equivalence of arbitrary
-modified files. This is a guarded record editor, not a certified Autodesk database.
+Устаревшие ограничения версий проверяются вместо вставки неподдерживаемых современных полей.
+Нативный проект всё ещё может сохранять такие правки вместе с нетронутым оригиналом;
+явный совместимый экспорт может регенерировать поддерживаемое подмножество.
 
-## Binary DXF and encodings
+**Непрозрачные метаданные, не изменённые, не пересчитываются.** Проприетарные реакторы, прокси-кэши
+и отношения, специфичные для приложений, могут требовать приложения-источника для
+повторной оценки. Сохранение байтов не доказывает семантическое равенство произвольных
+изменённых файлов. Это защищённый редактор записей, а не сертифицированная база данных Autodesk.
 
-The browser/worker reads current two-byte group codes and pre-R13 one-byte codes
-with extended escapes, little-endian numeric fields, 64-bit integers via BigInt,
-booleans, NUL-terminated strings and length-prefixed binary chunks. It writes real
-binary DXF, not text with a changed extension. Original 64-bit values outside the
-JavaScript safe-integer range and embedded zero bytes are retained.
+## Бинарный DXF и кодировки
 
-ASCII and binary archives remain in their input container when edited. Modern UTF-8
-strings and supported legacy code pages are decoded for viewing; regenerated legacy
-strings use DXF Unicode escapes. Unsupported encodings, truncated/invalid binary
-values and malformed record streams are rejected. Limits: 64 MiB source input,
-2 million pairs, 128 MiB generated output. Native archived projects allow 256 MiB;
-source size plus baseline geometry can still exceed that limit and should be split.
+Браузер/воркер читает текущие двухбайтовые коды групп и пред-R13 однобайтовые коды
+с расширенными escape-последовательностями,little-endian числовые поля, 64-битные целые через BigInt,
+булевы, строки с NUL-terminator и бинарные блоки с префиксом длины. Он записывает настоящий
+бинарный DXF, а не текст с изменённым расширением. Исходные 64-битные значения за пределами
+безопасного целочисленного диапазона JavaScript и встроенные нулевые байты сохраняются.
+
+ASCII и бинарные архивы остаются в контейнере ввода при редактировании. Современные UTF-8
+строки и поддерживаемые устаревшие кодовые страницы декодируются для просмотра; регенерированные устаревшие
+строки используют Unicode-экранирования DXF. Неподдерживаемые кодировки, обрезанные/невалидные бинарные
+значения и некорректные потоки записей отклоняются. Ограничения: 64 МиБ ввода исходника,
+2 миллиона пар, 128 МиБ генерируемого вывода. Нативные архивные проекты позволяют 256 МиБ;
+размер исходника плюс базовая геометрия всё ещё может превышать этот лимит и должен быть разделён.
 
 ## DWG
 
-When the optional installed LibreDWG bridge opens a DWG, `.kcad` retains the original
-DWG bytes **and** the converter's DXF output separately. `SOURCEORIGINAL` restores
-the original DWG. `DXFSAVE` patches the converted DXF, not the original DWG database.
-Real native DWG conversion remains unverified without an installed codec; mocked
-bridge tests and synthetic signature fixtures are not codec certification. Arbitrary
-lossless modified DWG export, ACIS/SAT/SAB evaluation and proxy-object editing are
-not established by this feature.
+Когда опциональный установленный мост LibreDWG открывает DWG, `.kcad` сохраняет исходные
+байты DWG **и** вывод DXF конвертера отдельно. `SOURCEORIGINAL` восстанавливает
+исходный DWG. `DXFSAVE` исправляет преобразованный DXF, а не исходную базу данных DWG.
+Реальная нативная конвертация DWG остаётся непроверенной без установленного кодека; тесты
+моста с имитацией и синтетические фикстуры подписей не являются сертификацией кодека. Произвольный
+беспотерижный экспорт изменённого DWG, оценка ACIS/SAT/SAB и редактирование прокси-объектов
+не устанавливаются этой функцией.
 
-## Verification and format references
+## Верификация и ссылки на форматы
 
-`node tests/source-document.test.js` tests record preservation, edits, refusals,
-encodings, memory/history provenance and binary typing. `python3 tests/source_interop.py`
-uses independently produced ezdxf ASCII/binary/R12 files, tests changed geometry,
-XRECORD/XDATA and handle ownership, and requires zero audit errors or repairs.
-`python3 tests/source-document.browser.py` exercises actual file input, workers,
-commands, downloads, acknowledgement forms and native-project reopening. The test
-paces UI exports to avoid flooding the browser's automatic-download queue; file
-content and exact-byte assertions remain mandatory.
+`node tests/source-document.test.js` проверяет сохранение записей, правки, отказы,
+кодировки, происхождение памяти/истории и бинарную типизацию. `python3 tests/source_interop.py`
+использует независимо созданные ASCII/бинарные/R12-файлы ezdxf, проверяет изменённую геометрию,
+XRECORD/XDATA и владение хэндлами и требует нуля ошибок аудита или исправлений.
+`python3 tests/source-document.browser.py` проверяет фактический ввод файлов, воркеры,
+команды, загрузки, формы подтверждения и повторное открытие нативного проекта. Тест
+регулирует экспорт UI, чтобы не перегружать очередь автоматических загрузок браузера; содержимое файла
+и проверки байт-в-байт по-прежнему обязательны.
 
-Primary format references:
-- [Autodesk binary DXF description](https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-DXF/files/GUID-FC1C3C69-DBC2-49E4-893A-000D6538C0FE.htm)
-- [Autodesk group-code value types](https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-DXF/files/GUID-2553CF98-44F6-4828-82DD-FE3BC7448113.htm)
-- [Autodesk numerical group-code reference](https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DXF/files/GUID-3F0380A5-1C15-464D-BC66-2C5F094BCFB9.htm)
+Основные ссылки на формат:
+- [Описание бинарного DXF Autodesk](https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-DXF/files/GUID-FC1C3C69-DBC2-49E4-893A-000D6538C0FE.htm)
+- [Типы значений групповых кодов Autodesk](https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-DXF/files/GUID-2553CF98-44F6-4828-82DD-FE3BC7448113.htm)
+- [Числовая справка по групповым кодам Autodesk](https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DXF/files/GUID-3F0380A5-1C15-464D-BC66-2C5F094BCFB9.htm)

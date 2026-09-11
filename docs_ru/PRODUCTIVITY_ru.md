@@ -1,39 +1,39 @@
-# Drafting productivity
+# Производительность черчения
 
-The Productivity ribbon adds working selection, curve-station, quantity and layer-state workflows. The commands use the normal drawing database, native projects and atomic undo system. They do not require the optional native-solid server.
+Лента Productivity добавляет рабочие процессы выбора, станций кривых, подсчёта и состояний слоёв. Команды используют обычную базу данных чертежей, нативные проекты и систему атомарной отмены. Они не требуют опционального сервера нативных тел.
 
-## Commands
+## Команды
 
-| Command | Behavior |
+| Команда | Поведение |
 | --- | --- |
-| QSELECT | Filter editable objects by type, layer and literal text. Replace, add, remove or intersect the selection. Text filtering includes table cells and instance attributes. |
-| COUNT | Count selected objects, or visible model-space objects when nothing is selected, grouped by type/layer/block definition. Report analytic supported-curve lengths and algebraic closed-boundary areas. |
-| DIVIDE | Place internal POINT markers on equal divisions of a line, polyline, circle or circular arc. Closed curves receive one marker per division without duplicating the seam. |
-| MEASURE | Place markers at fixed arc-length intervals. An exact open endpoint is included; the closing seam is not duplicated. |
-| LENGTHEN | Change the total length, add/subtract a length increment, or apply a percentage to a line or circular arc, from either endpoint. The opposite endpoint stays fixed. |
-| REVERSE | Reverse line/polyline/spline/conic traversal while retaining the geometric locus, rational weights and bulge orientation. |
-| DATAEXTRACTION | Download CSV or JSON, or create an editable drawing TABLE containing type, layer, block, length and area. CSV includes individual attribute columns and protects textual cells against spreadsheet formula injection. A separate linked-table output uses [native annotation fields](FIELDS.md) for fixed-source measurements. |
-| LAYERSTATESAVE | Save visibility, locks, color, linetype, lineweight and current layer. Overwriting a state requires an explicit choice. |
-| LAYERSTATERESTORE | Restore or delete a saved state. Restoring leaves new layers intact and does not recreate deleted layers. |
+| QSELECT | Фильтрация редактируемых объектов по типу, слою и буквенному тексту. Замена, добавление, удаление или пересечение выделения. Фильтрация текста включает ячейки таблиц и атрибуты экземпляров. |
+| COUNT | Подсчёт выделенных объектов или видимых объектов модельного пространства, если ничего не выделено, сгруппированных по типу/слою/определению блока. Отчёт об аналитических длинах поддерживаемых кривых и алгебраических площадях замкнутых границ. |
+| DIVIDE | Размещение внутренних маркеров POINT на равных делениях отрезка, полилинии, окружности или дуги. Замкнутые кривые получают один маркер на деление без дублирования стыка. |
+| MEASURE | Размещение маркеров через фиксированные интервалы длины дуги. Точный конец открытой кривой включается; замыкающий стык не дублируется. |
+| LENGTHEN | Изменение общей длины, добавление/вычитание приращения длины или применение процента к отрезку или дуге из любого конца. Противоположный конец остаётся фиксированным. |
+| REVERSE | Обратный обход отрезка/полилинии/сплайна/коники с сохранением геометрического локуса, рациональных весов и ориентации прогиба. |
+| DATAEXTRACTION | Загрузка CSV или JSON или создание редактируемой таблицы чертежа, содержащей тип, слой, блок, длину и площадь. CSV включает отдельные столбцы атрибутов и защищает текстовые ячейки от инъекции формул электронных таблиц. Отдельный связанный вывод таблицы использует [собственные поля аннотаций](FIELDS.md) для фиксированных измерений источника. |
+| LAYERSTATESAVE | Сохранение видимости, блокировок, цвета, типа линии, толщины линии и текущего слоя. Перезапись состояния требует явного выбора. |
+| LAYERSTATERESTORE | Восстановление или удаление сохранённого состояния. Восстановление оставляет новые слои нетронутыми и не пересоздаёт удалённые слои. |
 
-## Precision and editing
+## Точность и редактирование
 
-LINE and straight polyline distances are evaluated in world XYZ. Circular arcs and bulged polyline segments use their analytical arc lengths, not the display tessellation. Marker blocks can align their X axis to the curve tangent. Marker creation retains the source curve and creates all markers in one transaction. Markers may use an existing configurable block definition; the block remains a real INSERT.
+Расстояния для LINE и прямых полилиний вычисляются в мировых XYZ. Дуговые и сегменты полилиний с прогибом используют свои аналитические длины дуг, а не отображаемую тесселяцию. Маркеры блоков могут выравнивать свою ось X по касательной к кривой. Создание маркеров сохраняет исходную кривую и создаёт все маркеры в одной транзакции. Маркеры могут использовать существующее настраиваемое определение блока; блок остаётся настоящим INSERT.
 
-Station creation is bounded to 10,000 objects per operation. Invalid, degenerate or noncircular curves are rejected before any object is added. LENGTHEN does not turn an ARC into a full circle or collapse a line. Edits to actively constrained curves must use their driving dimensions or remove the conflicting graph first; endpoint references are never silently reassigned by reversing a curve.
+Ограничение на создание станций — 10 000 объектов за операцию. Невалидные, вырожденные или некруглые кривые отклоняются до добавления каких-либо объектов. LENGTHEN не превращает ARC в полную окружность и не сворачивает отрезок. Правки активно ограничиваемых кривых должны использовать их управляющие размеры или сначала удалить конфликтующий граф; ссылки на концы никогда не переназначаются молча при развороте кривой.
 
-Layer states and extraction tables persist in native projects. Undo restores prior curve coordinates, marker sets, table contents and layer appearances. Dialogs that captured a curve reject applying their result after a newer drawing edit.
+Состояния слоёв и таблицы извлечения persistentны в нативных проектах. Отмена восстанавливает предыдущие координаты кривых, наборы маркеров, содержимое таблиц и внешний вид слоёв. Диалоги, захватившие кривую, отклоняют применение результата после более позднего редактирования чертежа.
 
-## Quantity scope
+## Область подсчёта количества
 
-Quantities operate on top-level objects. A block reference counts as one instance, not a recursive count of every member. Circle and supported closed-polyline areas include analytical bulge contributions; self-crossing boundaries have algebraic areas rather than Boolean-union areas. Unsupported quantities are empty, not fabricated zero-valued measurements. Ordinary extraction tables remain editable snapshots. The linked-field-table option updates a fixed set of source identities and shows missing or incompatible cells as ####; it is not an associative external spreadsheet/data link. JSON preserves exact scalar values; displayed table quantities use ten significant digits.
+Количество оперирует объектами верхнего уровня. Ссылка на блок считается одним экземпляром, а не рекурсивным подсчётом каждого элемента. Площади окружек и поддерживаемых замкнутых полилиний включают аналитические вклады прогиба; самопересекающиеся границы имеют алгебраические площади, а не площади булевого объединения. Неподдерживаемые количества пусты, а не fabricated измерения с нулевыми значениями. Обычные таблицы извлечения остаются редактируемыми снимками. Опция связанной таблицы полей обновляет фиксированный набор идентификаторов источника и показывает отсутствующие или несовместимые ячейки как ####; это не ассоциативная внешняя электронная таблица/ссылка на данные. JSON сохраняет точные скалярные значения; отображаемые количества таблиц используют десять значащих цифр.
 
-## Interchange
+## Обмен
 
-Point markers, static geometry and supported block references use the existing DXF exporter. Converted configurable blocks retain their evaluated static state using the existing block-variant export. The already integrated source-preserving export retains its safety checks: native-only layer-state metadata or unsupported definition edits may require an explicitly acknowledged compatibility export. This batch neither replaces the original-file archive nor claims unrestricted lossless DWG/DXF editing.
+Маркеры точек, статическая геометрия и поддерживаемые ссылки на блоки используют существующий DXF-экспортёр. Преобразованные настраиваемые блоки сохраняют своё вычисленное статическое состояние с помощью существующего экспорта вариантов блоков. Уже интегрированный экспорт с сохранением исходника сохраняет свои проверки безопасности: метаданные состояний слоёв, доступные только в нативном режиме, или неподдерживаемые изменения определений могут потребовать явно подтверждённого совместимого экспорта. Эта партия не заменяет архив исходного файла и не претендуется на беспотерижную редактирование DWG/DXF.
 
-The native solid kernel remains OpenCascade, not ACIS. This batch does not add SAT/SAB compatibility, a general 3D assembly solver, proprietary dynamic-block evaluation, Big Fonts, complete MTEXT composition, or hardware-WebGPU certification.
+Ядро нативных тел остаётся OpenCascade, а не ACIS. Эта партия не добавляет совместимость SAT/SAB, общий 3D-решатель сборок, проприетарную оценку динамических блоков, Big Fonts, полную композицию MTEXT или аппаратную сертификацию WebGPU.
 
-## Verification
+## Верификация
 
-`node tests/productivity.test.js` checks geometry, quantities, block stations, validation, resource bounds, persistence and transactions. `python3 tests/productivity.browser.py` exercises the real standalone editor, ribbon, forms, CSV downloads, editable tables, stale-dialog rejection and undo/redo. Both suites are discovered by the existing exhaustive verification runner; merging requires the complete existing and new suites to pass on the final integrated source.
+`node tests/productivity.test.js` проверяет геометрию, количества, блоки-станции, валидацию, ограничения ресурсов,持久ность и транзакции. `python3 tests/productivity.browser.py` проверяет реальный автономный редактор, ленту, формы, загрузки CSV, редактируемые таблицы, отклонение устаревших диалогов и отмену/повтор. Оба набора обнаруживаются существующим полным средством верификации; слияние требует прохождения полного набора существующих и новых тестов на финальном интегрированном исходном коде.

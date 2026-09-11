@@ -1,22 +1,22 @@
-# Precision and text fidelity corrections
+# Исправления точности и точности текста
 
-This update extends the integrated source-document editor; it does not introduce
-another archive format or replace the guardrails documented in SOURCE-DOCUMENTS.md.
+Это обновление расширяет интегрированный редактор исходных документов; оно не вводит
+другой формат архива и не заменяет ограничения, задокументированные в SOURCE-DOCUMENTS.md.
 
-- DXF numeric output uses the full round-trippable JavaScript double representation,
-  rather than rounding every coordinate to ten decimal places. Editing one endpoint
-  therefore does not round an unedited endpoint in the same source record.
-- TEXT, ATTDEF and ATTRIB content retains significant leading/trailing whitespace.
-- Unicode block names remain distinct, are escaped consistently in legacy DXF
-  BLOCK_RECORD/BLOCK/INSERT names, and survive repeated compatibility exports.
-  Model/paper-space containers are not manufactured into user-defined blocks.
-- Source TEXT generation bits unrelated to backwards/upside-down flags are retained.
-- Reassigning a source entity color removes an obsolete color-book name as well as
-  obsolete indexed/true-color values.
+- Числовой вывод DXF использует полное представление JavaScript с плавающей точкой,
+  а не округляет каждую координату до десяти знаков после запятой. Редактирование одного конца
+  поэтому не округляет неотредактированный конец в той же записи источника.
+- Содержимое TEXT, ATTDEF и ATTRIB сохраняет значимые начальные/конечные пробелы.
+- Unicode-имена блоков остаются уникальными, consistentно экранируются в устаревших именах DXF
+  BLOCK_RECORD/BLOCK/INSERT и выживают при повторных совместимых экспортах.
+  Контейнеры model/paper-space не создаются искусственно в пользовательские блоки.
+- Исходные биты генерации TEXT, не связанные с флагами backwards/upside-down, сохраняются.
+- При переназначении цвета объекта-источника удаляется устаревшее имя/colorbook, а также
+  устаревшие индексные/истинные цветовые значения.
 
-`tests/exchange-fidelity.test.js` covers 14 numerical, record, text and block cases.
-`tests/exchange_fidelity_interop.py` uses ezdxf and its Unicode escape decoder to
-verify both edited and converted ASCII/binary files independently (four checks,
-zero audit errors or automatic repairs). The established source/browser suites
-remain required in full CI. This does not establish arbitrary lossless CAD editing,
-ACIS compatibility, real DWG codec execution or hardware WebGPU verification.
+`tests/exchange-fidelity.test.js` охватывает 14 числовых, записевых, текстовых и блочных случаев.
+`tests/exchange_fidelity_interop.py` использует ezdxf и его декодер Unicode-экранирования для
+независимой проверки как отредактированных, так и преобразованных ASCII/бинарных файлов (четыре проверки,
+ноль ошибок аудита или автоматических исправлений). Установленные наборы источников/браузера
+по-прежнему требуются в полном CI. Это не устанавливает произвольное беспотерижное редактирование CAD,
+совместимость ACIS, реальное выполнение кодека DWG или аппаратную проверку WebGPU.

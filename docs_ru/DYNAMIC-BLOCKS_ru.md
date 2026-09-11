@@ -1,36 +1,36 @@
-# Configurable blocks
+# Настраиваемые блоки
 
-The **Blocks** ribbon and `DYNAMICDEMO` expose native, browser-only configurable blocks. Each INSERT retains a shared definition, independent typed parameter values, its placement transform and attribute values. Changing parameters evaluates real geometry from the original definition; it does not repeatedly transform a previously generated mesh. Undo/redo and `.kcad` save/load retain the behavior.
+Лента **Blocks** и `DYNAMICDEMO` представляют нативные, работающие только в браузере настраиваемые блоки. Каждый INSERT сохраняет общее определение, независимые типизированные значения параметров, преобразование размещения и значения атрибутов. Изменение параметров вычисляет реальную геометрию из исходного определения; оно не многократно преобразует ранее сгенерированную сетку. Отмена/повтор и сохранение/загрузка `.kcad` сохраняют поведение.
 
-## Use
+## Использование
 
-Run `DYNAMICDEMO` for two editable fabrication plates. Select either plate and change Width, Height, Fastener, Count, visibility or flip using the inspector or **Block parameters** (`BPROPERTIES`, `DYNBLOCK`). The second instance remains independent. The fastener lookup sets the hole radius; the derived Area field is read-only. `BRESET` resets selected references to their definition defaults. `EXPLODE` creates the current evaluated geometry and removes that instance's behavior; undo restores it.
+Запустите `DYNAMICDEMO` для двух редактируемых пластин для изготовления. Выберите любую пластину и измените Width, Height, Fastener, Count, видимость или отражение с помощью инспектора или **Block parameters** (`BPROPERTIES`, `DYNBLOCK`). Второй экземпляр остаётся независимым. Поиск крепежа устанавливает радиус отверстия; производное поле Area доступно только для чтения. `BRESET` сбрасывает выбранные ссылки к значениям по умолчанию определения. `EXPLODE` создаёт текущую вычисленную геометрию и удаляет поведение этого экземпляра; отмена восстанавливает его.
 
-`BDEFINE` edits the selected reference's shared dynamic definition, or attaches a starter definition to a normal block. The dialog lists stable local entity and `attribute:TAG` identifiers. `BACTION` offers forms for move, stretch, rotate, scale, flip, rectangular/polar array and polar-stretch actions. Advanced visibility, lookup tables and parameter definitions use the validated JSON editor. `BEDIT`/`BCLOSE` still edit shared base geometry. Definition changes update all references; references with incompatible overrides cause validation failure rather than a partial update.
+`BDEFINE` редактирует общее динамическое определение выбранной ссылки или прикрепляет начальное определение к обычному блоку. Диалог перечисляет стабильные локальные идентификаторы объектов и `attribute:TAG`. `BACTION` предлагает формы для перемещения, растяжения, поворота, масштабирования, отражения, прямоугольного/полярного массива и полярного растяжения. Расширенная видимость, таблицы поиска и определения параметров используют проверенный редактор JSON. `BEDIT`/`BCLOSE` по-прежнему редактируют общую базовую геометрию. Изменения определения обновляют все ссылки; ссылки с несовместимыми заменами вызывают ошибку проверки, а не частичное обновление.
 
-## Parameters
+## Параметры
 
-A definition stores `dynamic: {version: 1, parameters: [...], actions: [...], lookups: [...]}`. Parameters use `number`, positive `length`, degree-valued `angle`, `integer`, `boolean` or `enum` types. Numeric parameters support minimum, maximum, increment and discrete allowed values. A numeric expression can depend on other parameters; the existing arithmetic expression parser rejects cycles, unknown symbols and executable input. Boolean values can enter numeric expressions as 0/1; enum strings cannot. Derived values and lookup outputs are not editable overrides.
+Определение хранит `dynamic: {version: 1, parameters: [...], actions: [...], lookups: [...]}`. Параметры используют типы `number`, положительный `length`, угловой `angle`, `integer`, `boolean` или `enum`. Числовые параметры поддерживают минимум, максимум, приращение и дискретные допустимые значения. Числовое выражение может зависеть от других параметров; существующий парсер арифметических выражений отклоняет циклы, неизвестные символы и исполняемый ввод. Булевы значения могут использоваться в числовых выражениях как 0/1; строки enum не могут. Производные значения и результаты поиска не являются редактируемыми заменами.
 
-Lookup tables select an enum input and provide a complete row for each enum value. Each row must drive the same output names with compatible typed values. Conflicting drivers are rejected. `${Parameter}` in visible attribute text interpolates the evaluated value; the stored template and per-instance attribute source are not overwritten.
+Таблицы поиска выбирают вход enum и предоставляют полную строку для каждого значения enum. Каждая строка должна управлять одинаковыми именами выходов с совместимыми типизированными значениями. Конфликтующие драйверы отклоняются. `${Parameter}` в видимом тексте атрибутов интерполирует вычисленное значение; сохранённый шаблон и исходный атрибут для экземпляра не перезаписываются.
 
-## Actions
+## Действия
 
-Actions execute in listed order in **definition-local coordinates**. All targets are stable base-entity IDs or `attribute:TAG` identifiers.
+Действия выполняются в указанном порядке в **координатах определения**. Все цели — стабильные базовые идентификаторы объектов или идентификаторы `attribute:TAG`.
 
-| Action | Geometry behavior |
+| Действие | Поведение геометрии |
 |---|---|
-| move | Translate targets with X/Y/Z numeric expressions. |
-| stretch | Move the vertices of straight lines/polylines inside a specified local crossing box. Fully enclosed other objects translate; unsupported partial curved-object stretches reject. |
-| rotate | Rotate by a degree expression around a specified local center and axis. |
-| scale | Uniform positive scale about a local center. |
-| flip | Reflect across a local plane when its boolean parameter is true. |
-| array | Generate positive integer rows/columns using local X/Y spacing. Downstream actions also affect the copies of their source targets. |
-| polar-array | Replicate a target group around an arbitrary 3D axis with expression count/fill angle; optionally keep orientation about a shared base. |
-| polar-stretch | Change reach and rotation together with a local stretch frame and explicit rigid/rotate-only member modes. |
-| visibility | Choose a complete enum state. Objects outside the visibility action's target scope remain visible. |
+| move | Перемещение целей с помощью числовых выражений X/Y/Z. |
+| stretch | Перемещение вершин прямых отрезков/полилиний внутри указанной локальной пересекающейся рамки. Полностью заключённые другие объекты перемещаются; неподдерживаемые частичные растяжения изогнутых объектов отклоняются. |
+| rotate | Поворот на угол в градусах вокруг указанного локального центра и оси. |
+| scale | Равномерное положительное масштабирование относительно локального центра. |
+| flip | Отражение через локальную плоскость, когда его булев параметр равен true. |
+| array | Генерация положительных целых строк/столбцов с использованием локальных интервалов X/Y. Последующие действия также влияют на копии их целей-источников. |
+| polar-array | Репликация группы целей вокруг произвольной 3D-оси с выражением количества/угла заполнения; опциональное сохранение ориентации относительно общей базовой точки. |
+| polar-stretch | Совместное изменение досягаемости и поворота с локальной рамкой растяжения и явными режимами жёсткого/только-вращения элементов. |
+| visibility | Выбор полного состояния enum. Объекты за пределами области видимости действия остаются видимыми. |
 
-Example stretching the far endpoint of a line:
+Пример растяжения дальнего конца отрезка:
 
 ```json
 {
@@ -40,33 +40,10 @@ Example stretching the far endpoint of a line:
 }
 ```
 
-Copy/paste brings referenced definitions and behavior to the destination drawing. Unit conversion occurs in the INSERT transform exactly once; parameter values remain in the definition's original local units. Native-solid members may undergo valid whole-object transformations; a dynamic stretch does not directly modify native solid topology.
+Копирование/вставка переносит определения и поведение ссылок в целевой чертёж. Конвертация единиц происходит в преобразовании INSERT ровно один раз; значения параметров остаются в исходных локальных единицах определения. Элементы нативных тел могут претерпевать допустимые целостные преобразования; динамическое растяжение не изменяет топологию нативного тела напрямую.
 
-## Rendering and interchange
+## Рендеринг и обмен
 
-Visible members use their own layers, colors, line styles and mesh classification. Layer 0 and ByBlock inheritance are resolved through nested references. Hidden member and nested-reference layers are respected. Selecting a reference highlights its visible members as one object. SVG uses distinct member IDs and member appearance.
+Видимые элементы используют свои собственные слои, цвета, стили линий и классификацию сетки. Наследование слоя 0 и ByBlock разрешается через вложенные ссылки. Скрытые элементы и слои вложенных ссылок учитываются. Выбор ссылки подсвечивает её видимые элементы как один объект. SVG использует уникальные идентификаторы элементов и внешний вид элементов.
 
-**DXF exports evaluated static variants**, using standard BLOCK/INSERT records for each configured instance and evaluated attribute text. Independent ezdxf tests verify positions, colors, standard references and zero audit repairs. The native master is not changed. The exporter does **not** encode this schema as Autodesk dynamic-block evaluation objects, and importing an arbitrary AutoCAD dynamic block does not recover its actions. Retain `.kcad` as the configurable master. Normal persistent block attributes retain their existing standard interchange behavior.
-
-## Boundaries
-
-This is a Kestrel-native ordered action system, not full AutoCAD dynamic-block compatibility. There is no dedicated graphical action-chain editor, custom drag parameter grip, alignment parameter, associative path array or proprietary DWG action-graph evaluator. Partial curved-entity stretch is rejected. A definition is bounded to 64 parameters and 128 actions; each evaluation is bounded to 20,000 generated objects, with the existing nested-block depth and drawing limits still enforced. These are resource guards, not performance guarantees. Invalid or oversized evaluations roll back atomically.
-
-## Reproducible checks
-
-```sh
-node tests/dynamic-blocks.test.js
-python3 tools/build.py
-python3 tests/dynamic-blocks.browser.py
-python3 tests/dynamic_interop.py
-```
-
-The browser suite mixes actual ribbon, dialog, inspector, clipboard and download operations with scripted fixture selection. The complete release verification discovers these suites automatically. Hardware WebGPU execution remains a separate validation path.
-
-## Polar arrays and inverse table matching
-
-`BACTION` now authors `polar-array` actions, and `BLOOKUPMATCH` selects a uniquely matching lookup row from numeric/boolean output properties. See [exact action schema, matching semantics and test commands](POLAR-BLOCKS.md). This inverse discrete-row match is not a proprietary action-graph decoder.
-
-## Polar stretching
-
-`BACTION` also authors coordinated reach/rotation actions. See [polar-stretch geometry, member modes and boundaries](POLAR-STRETCH.md).
+**DXF экспортирует вычисленные статические варианты**, используя стандартные записи BLOCK/INSERT для каждого настроенного экземпляра и вычисленный текст атрибутов. Независимые тесты ezdxf проверяют позиции, цвета, стандартные ссылки и нулевое количество исправлений. Нативный мастер не изменяется. Экспортёр **не** кодирует эту схему как объекты оценки динамических блоков Autodesk, и импорт произвольного динамического блока AutoCAD не восстанавливает его действия. Сохраняйте `.kcad` как настраиваемый мастер. Обычные persistentные атрибуты блоков сохраняют своё существующее стандартное поведение обмена.

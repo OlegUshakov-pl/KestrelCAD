@@ -1,35 +1,35 @@
-# Native interference and clearance
+# Нативные помехи и зазоры
 
-`INTERFERE` and `CLEARANCE` open **Solids → Material checks**. Select 2–32 visible top-level native solids first. With no selection, the dialog lists all visible top-level native bodies. Mesh-only entities, open sheets and mixed solid/surface compounds are not silently converted or omitted. Locked sources may be analyzed; output geometry requires an unlocked visible current layer.
+`INTERFERE` и `CLEARANCE` открывают **Solids → Material checks**. Сначала выберите 2–32 видимых объекта верхнего уровня. Без выделения диалог перечисляет все видимые нативные объекты верхнего уровня. Объекты только-сетка, открытые листы и составные тела/поверхности не молча преобразуются и не пропускаются. Заблокированные источники могут анализироваться; выходная геометрия требует незаблокированный видимый текущий слой.
 
-Choose every unordered pair, or first-set versus second-set comparison. An object included in both sets belongs only to the first. Click **Analyze** to compute a read-only report. Changing settings invalidates the report. Up to 128 distinct pairs are accepted per query; split larger assemblies into explicit sets.
+Выберите все неупорядоченные пары или сравнение первого набора со вторым. Объект, включённый в оба набора, принадлежит только первому. Нажмите **Analyze** для вычисления отчёта только для чтения. Изменение настроек делает отчёт недействительным. До 128 уникальных пар принимается на один запрос; разбейте большие сборки на явные наборы.
 
-The result distinguishes:
+Результат различает:
 
-| Status | Meaning |
+| Статус | Значение |
 |---|---|
-| Interference | Native Boolean common contains positive solid volume. |
-| Contact / within tolerance | No computed positive overlap and minimum distance is at or below the entered contact tolerance. This includes small positive gaps. |
-| Clearance | No overlap/contact and the gap is below required clearance. |
-| Separated | No overlap/contact and the gap is at least the required clearance. |
+| Помеха | Нативное булево пересечение содержит положительный объём тела. |
+| Контакт / в пределах допуска | Вычисленного положительного перекрытия нет, и минимальное расстояние находится на или ниже введённого допуска контакта. Включает малые положительные зазоры. |
+| Зазор | Нет перекрытия/контакта, и зазор ниже требуемого зазора. |
+| Разделено | Нет перекрытия/контакта, и зазор не менее требуемого зазора. |
 
-Distances and contact tolerance use current drawing units; overlap volume uses their cube. Values describe numerical OCCT B-rep geometry, not exact rational arithmetic or manufacturing certification. Minimum material distance is zero for intersecting/contained material and is **not penetration depth**. A body in a hollow solid's cavity is not overlapping its material. Contact tolerance affects classification only; it is never a fuzzy Boolean enlargement.
+Расстояния и допуск контакта используют текущие единицы чертежа; объём перекрытия использует их куб. Значения описывают числовую геометрию OCCT B-rep, а не точную рациональную арифметику или сертификацию изготовления. Минимальное расстояние материала равно нулю для пересекающихся/вложенных материалов и **не является глубиной проникновения**. Тело в полости полого тела не перекрывает его материал. Допуск контакта влияет только на классификацию; он никогда не является размытым увеличением булевой операции.
 
-**Focus pair** selects the two source bodies and fits them in the viewport. **Download report** exports labeled entity IDs, units, source revision, all pair classifications, overlap volumes and minimum-distance witness coordinates. It excludes embedded BREP payloads. Multiple witnesses can exist; at most eight are returned per pair. The reported total witness count is preserved. An inner-solution witness may lie inside a solid rather than on its boundary.
+**Focus pair** выбирает два исходных тела и размещает их в окне. **Download report** экспортирует помеченные ID объектов, единицы, ревизию источника, все классификации пар, объёмы перекрытия и координаты-свидетели минимального расстояния. Он исключает встроенные полезные нагрузки BREP. Может существовать несколько свидетелей; возвращается не более восьми на пару. Общее количество свидетелей сохраняется. Свидетель внутреннего решения может находиться внутри тела, а не на его границе.
 
-With overlap generation enabled, **Retain overlap solids** adds each pair's common material as an independent native B-rep body on the current layer. Originals are untouched. The retained results support native saving, STEP exchange and subsequent native editing. **Retain gap line** adds a line between the first witness pair for a positive gap greater than contact tolerance. Both actions are single undoable transactions; neither creates a persistent measurement association. A report closed without retention adds nothing to the drawing.
+При включённой генерации перекрытий **Retain overlap solids** добавляет общее содержимое каждой пары как независимое нативное тело B-rep на текущем слое. Оригиналы остаются нетронутыми. Сохранённые результаты поддерживают нативное сохранение, обмен STEP и последующее нативное редактирование. **Retain gap line** добавляет линию между первой парой свидетелей для положительного зазора, превышающего допуск контакта. Обе операции — одноразовые отменяемые транзакции; ни одна не создаёт постоянную измерительную ассоциацию. Отчёт, закрытый без сохранения, не добавляет ничего в чертёж.
 
-## Implementation
+## Реализация
 
-`tools/native_analysis.py` is the stateless material-query library. `kernel.execute()` dispatches `interference` through the existing restricted, size-limited, 60-second local subprocess bridge. Sources are decoded and transformed from authoritative BREP streams. Compounds must contain only closed positive-volume solids; their material is unioned before comparison to prevent internal double-counting. An aggregate 20,000 face/edge limit and at most 64 solids per operand bound requests.
+`tools/native_analysis.py` — это безсостоянная библиотека запросов материала. `kernel.execute()` направляет `interference` через существующий ограниченный, с лимитом размера, 60-секундный локальный подпроцессный мост. Источники декодируются и преобразуются из авторитетных потоков BREP. Составные тела должны содержать только замкнутые положительные по объёму тела; их материал объединяется перед сравнением для предотвращения внутреннего двойного подсчёта. Совокупный лимит 20 000 граней/рёбер и не более 64 тел на операнд ограничивают запросы.
 
-Geometry-based, tolerance-expanded `BRepBndLib.AddOptimal` boxes use `useTriangulation=False`. Separated boxes skip only the Boolean common operation. Every reported minimum gap still comes from `BRepExtrema_DistShapeShape`. `BRepAlgoAPI_Common` operates non-destructively without using contact tolerance as its fuzzy value. A failed pair aborts the complete query rather than misreporting an unknown result as separated. Display triangulation is generated only when packing explicitly requested overlap bodies (maximum 64 pairwise result bodies).
+Геометрические, с допуском расширенные коробки `BRepBndLib.AddOptimal` используют `useTriangulation=False`. Разделённые коробки пропускают только операцию булева пересечения. Каждый сообщённый минимальный зазор по-прежнему поступает от `BRepExtrema_DistShapeShape`. `BRepAlgoAPI_Common` работает неразрушающе, не используя допуск контакта как своё размытое значение. Неудачная пара прерывает весь запрос вместо ложного отчёта об неизвестном результате как разделённом. Отображаемая тесселяция генерируется только при упаковке явно запрошенных тел перекрытия (максимум 64 тела для парных результатов).
 
-`src/native-analysis.js` validates pair plans, captures source revisions and authoritative inputs, checks complete response indices/counts/volumes/witnesses, and handles transactional output. `src/native-analysis-ui.js` supplies the ribbon and working dialogs. Switching documents, editing sources, or closing a dialog prevents an asynchronous result from mutating or repainting a newer document/dialog. All output bodies validate before the first write.
+`src/native-analysis.js` проверяет планы пар, фиксирует ревизии источников и авторитетные входы, проверяет индексы/подсчёты/объёма/свидетелей полного ответа и обрабатывает транзакционный вывод. `src/native-analysis-ui.js` предоставляет ленту и рабочие диалоги. Переключение документов, правка источников или закрытие диалога препятствуют асинхронному результату изменять или перерисовывать более новый документ/диалог. Все выходные тела проверяются перед первой записью.
 
-Reports are snapshots. Pairwise overlap volumes can double-count material shared by three or more inputs; do not sum them as the unique assembly interference volume. This implementation does not provide nested block/xref solid selection, surface interference, automatic collision response, contact constraints, continuous motion collision detection or ACIS/DWG compatibility. The hosted Pages editor displays saved results, but native analysis requires `requirements-kernel.txt` and `python3 tools/serve.py` locally.
+Отчёты — это снимки. Парные объёмы перекрытия могут дважды подсчитывать материал, общий для трёх и более входов; не суммируйте их как уникальный объём помех сборки. Эта реализация не предоставляет вложенный выбор тел блоков/внешних ссылок, помехи поверхностей, автоматический отклик столкновений, ограничения контактов, обнаружение столкновений непрерывного движения или совместимость ACIS/DWG. Редактор Pages отображает сохранённые результаты, но нативный анализ требует `requirements-kernel.txt` и `python3 tools/serve.py` локально.
 
-## Verification
+## Верификация
 
 ```sh
 node tests/native-analysis.test.js
@@ -39,6 +39,6 @@ python3 tests/native-analysis.browser.py
 python3 tools/verify.py --previews
 ```
 
-Client tests use explicitly synthetic transport fixtures for contract/rollback testing. Python tests use actual OCCT shapes, including spheres, cylinders, cavities, compound material, reflected/nonuniform placements, retained BREP and STEP round trips. The committed browser suite uses the actual served editor and real HTTP kernel bridge. These test classes are separate; a standalone diagnostic binding is not HTTP transport verification. All conventionally named suites are discovered by the full verification runner.
+Тесты клиента используют явно синтетические транспортные фикстуры для проверки контракта/отката. Python-тесты используют реальные фигуры OCCT, включая сферы, цилиндры, полости, составной материал, отражённые/неравномерные размещения, сохранённые BREP и STEP-циклы. Включённый набор браузера использует фактический предоставляемый редактор и реальный HTTP-мост ядра. Эти классы тестов разделены; автономная привязка диагностики не является проверкой HTTP-транспорта. Все обычно именованные наборы обнаруживаются полным средством верификации.
 
-Primary references: [INTERFERE workflow](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-FF1ED01E-9AB5-455F-8E84-2F01C2EA3B62.htm), [OCCT distance API](https://dev.opencascade.org/doc/refman/html/class_b_rep_extrema___dist_shape_shape.html), and [CadQuery shape algorithms](https://cadquery.readthedocs.io/en/stable/_modules/cadquery/occ_impl/shapes.html). Kestrel's UI, protocol, result handling and scope are its own implementation.
+Основные ссылки: [рабочий процесс INTERFERE](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-FF1ED01E-9AB5-455F-8E84-2F01C2EA3B62.htm), [API расстояний OCCT](https://dev.opencascade.org/doc/refman/html/class_b_rep_extrema___dist_shape_shape.html) и [алгоритмы фигур CadQuery](https://cadquery.readthedocs.io/en/stable/_modules/cadquery/occ_impl/shapes.html). UI, протокол, обработка результатов и область Kestrel являются его собственной реализацией.

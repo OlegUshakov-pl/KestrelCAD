@@ -1,26 +1,26 @@
-# Native solid and surface editing
+# Нативное редактирование тел и поверхностей
 
-These operations extend the already integrated **OpenCascade** engine. They operate on retained B-rep geometry, not triangle approximations. This is not ACIS or SAT/SAB support.
+Эти операции расширяют уже интегрированный движок **OpenCascade**. Они работают с сохранённой геометрией B-rep, а не с треугольными приближениями. Это не поддержка ACIS или SAT/SAB.
 
-Run the local server after installing `requirements-kernel.txt`. GitHub Pages can display saved bodies but cannot execute the Python kernel. All new tools are available on the **Solids** ribbon and through the command palette.
+Запустите локальный сервер после установки `requirements-kernel.txt`. GitHub Pages может отображать сохранённые тела, но не может запускать Python-ядро. Все новые инструменты доступны на ленте **Solids** и через палитру команд.
 
-## Commands
+## Команды
 
-- **SLICE** (`solid-slice`): select one or more native bodies; enter plane origin and normal in the current UCS; retain the positive side, negative side or both. The cutter uses analytic infinite half-spaces. Each input produces at most two independently editable native bodies, preserving its layer, color and line properties. The plane must cross the interior, not merely touch it. Native single-face surfaces can also be sliced.
-- **PLANESURF** (`solid-plane-surface`): select a closed circle, ellipse or polyline, followed by optional hole boundaries. It creates a planar native face, leaving source profiles intact. All loops must be coplanar and form valid topology. A surface has area and no solid volume.
-- **SOLIDEXTRACT** (`solid-extract-faces`): select a native body and choose current face indices from the topology table. Extracted planar or curved faces retain the source's appearance. The original body remains.
-- **THICKEN** (`solid-thicken`): thicken one native face with a positive or negative distance. Optionally retain the source surface. This uses the native offset/solid algorithm, including curved faces, and rejects invalid offsets. Arbitrary multi-face shells are not accepted by this command.
-- **SOLIDSEPARATE** (`solid-separate`): turn a composite native body containing multiple solids into independent entities, in one undoable operation.
-- **MASSPROP** (`solid-massprops`): download a JSON report with volume, surface area, uniform-density mass, world-space centroid, centroidal world-axis inertia tensor, principal moments/axes, and bounds. Values come from the transformed B-rep. Mass units follow the entered density; inertia has mass × drawing-unit² units. Multiple solids are additive, including overlaps; union overlapping solids first to measure their geometric union.
+- **SLICE** (`solid-slice`): выбор одного или нескольких нативных тел; ввод начала координат и нормали текущего UCS; сохранение положительной стороны, отрицательной или обеих. Режущий инструмент использует аналитические бесконечные полупространства. Каждый вход создаёт не более двух независимо редактируемых нативных тел, сохраняя их слой, цвет и свойства линий. Плоскость должна пересекать внутреннюю часть, а не просто касаться её. Нативные одногранные поверхности также могут быть разрезаны.
+- **PLANESURF** (`solid-plane-surface`): выбор замкнутой окружности, эллипса или полилинии, затем необязательные границы отверстий. Создаёт плоскую нативную грань, оставляя исходные профили нетронутыми. Все контуры должны быть компланарными и образовывать валидную топологию. Поверхность имеет площадь, но не объём тела.
+- **SOLIDEXTRACT** (`solid-extract-faces`): выбор нативного тела и выбор текущих индексов граней из таблицы топологии. Извлечённые плоские или изогнутые грани сохраняют вид исходника. Исходное тело остаётся.
+- **THICKEN** (`solid-thicken`): утолщение одной нативной грани на положительное или отрицательное расстояние. Опциональное сохранение исходной поверхности. Используется алгоритм смещения/тела, включая изогнутые грани, и отклоняются невалидные смещения. Произвольные многообролочные оболочки этой командой не принимаются.
+- **SOLIDSEPARATE** (`solid-separate`): превращение составного нативного тела, содержащего несколько тел, в независимые объекты в одной отменяемой операции.
+- **MASSPROP** (`solid-massprops`): загрузка JSON-отчёта с объёмом, площадью поверхности, массой при равномерной плотности, центром тяжести в мировых координатах, тензором инерции центра, главными моментами/осями и границами. Значения получены из преобразованного B-rep. Единицы массы следуют введённой плотности; инерция имеет единицы масса × ед. чертежа². Несколько тел аддитивны, включая перекрытия; для измерения их геометрического объединения сначала объедините перекрывающиеся тела.
 
-## Editing guarantees and limits
+## Гарантии и ограничения редактирования
 
-All outputs of a multi-body operation are validated before input deletion. Input deletion, new entities and selection are one atomic transaction. Undo restores native data; native project saving retains every resulting body. A drawing changed while the dialog or kernel operation was active causes the result to be rejected rather than overwriting newer edits. Native Boolean and edge operations now preserve the first input's appearance too.
+Все выходные данные.multi-body операции проверяются перед удалением входных данных. Удаление входных данных, новые объекты и выделение — одна атомарная транзакция. Отмена восстанавливает нативные данные; сохранение нативного проекта сохраняет каждое полученное тело. Изменение чертежа во время активного диалога или операции ядра приводит к отклонению результата, а не перезаписи более поздних правок. Нативные булевы операции и операции с рёбрами теперь также сохраняют вид первого входного объекта.
 
-Display tessellation is finite and independent of the B-rep. Native algorithms still use numerical tolerances; validity checks are not a manufacturing certification. Self-intersections, singular offset surfaces, excessive topology or native-library failures are reported without committing geometry. One request is limited to 32 inputs, 64 results, a combined display-vertex limit, and a 48 MiB multi-body response. Existing wall-clock and process resource guards still apply.
+Отображаемая тесселяция конечна и независима от B-rep. Нативные алгоритмы всё ещё используют числовые допуски; проверки валидности не являются сертификацией изготовления. Самопересечения, сингулярные поверхности смещения, чрезмерная топология или ошибки нативной библиотеки сообщаются без фиксации геометрии. Один запрос ограничен 32 входами, 64 результатами, общим лимитом отображаемых вершин и 48 МиБ ответом для multi-body. Существующие ограничения реального времени и ресурсов процесса по-прежнему действуют.
 
-STEP import now collects **all transferred roots**, not only the first. It does not promise retention of source assembly names, colors or application metadata. IGES may contain disconnected surfaces rather than solids. DWG/DXF and ACIS compatibility are unchanged.
+Импорт STEP теперь собирает **все переданные корни**, а не только первый. Он не обещает сохранения имён сборок-источников, цветов или метаданных приложений. IGES может содержать отдельные поверхности, а не тела. Совместимость DWG/DXF и ACIS остаётся неизменной.
 
-## Verification
+## Верификация
 
-`python3 tests/native-edit.test.py` executes actual OpenCascade geometry tests, including analytic volumes, inertia, curved-face thickening, inclined slicing, hole preservation, STEP multi-body round trips and invalid input rejection. `python3 tests/native-edit.browser.py` exercises the served editor and actual native bridge, UI dialogs, downloads, appearance, native persistence, stale-result rejection and undo/redo. The complete release runner discovers both suites automatically.
+`python3 tests/native-edit.test.py` выполняет реальные тесты геометрии OpenCascade, включая аналитические объёмы, инерцию, утолщение изогнутых граней, наклонное разрезание, сохранение отверстий, многотельный STEP-циклы и отклонение невалидных входов. `python3 tests/native-edit.browser.py` проверяет предоставляемый редактор и реальный нативный мост, диалоги UI, загрузки, вид,持久ность, отклонение устаревших результатов и отмену/повтор. Полное средство релиза автоматически обнаруживает оба набора.

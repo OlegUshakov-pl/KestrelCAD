@@ -1,28 +1,28 @@
-# Associative annotations, drawing properties and linked tables
+# Ассоциативные аннотации, свойства чертежа и связанные таблицы
 
-Kestrel-native fields keep annotation text connected to object measurements, drawing properties, named parameters, other fields and formulas. Their definitions live in `.kcad`; the evaluated text remains ordinary, renderable TEXT/MTEXT, leader content, table cells or block attributes. This is an original declarative evaluator, not an interpreter for proprietary DWG/DXF field codes.
+Собственные поля Kestrel поддерживают связь текста аннотаций с измерениями объектов, свойствами чертежа, именованными параметрами, другими полями и формулами. Их определения находятся в `.kcad`; вычисленный текст остаётся обычным, отображаемым TEXT/MTEXT, содержимым выносок, ячейками таблиц или атрибутами блоков. Это оригинальный декларативный оценщик, а не интерпретатор проприетарных кодов полей DWG/DXF.
 
-## Commands and authoring
+## Команды и создание
 
-| Command | Operation |
+| Команда | Операция |
 | --- | --- |
-| `FIELD` | Create an MTEXT field or edit fields on a selected annotation, table or attributed INSERT. |
-| `UPDATEFIELD` | Recompute every native field in the drawing; a no-op creates no extra undo entry. |
-| `FIELDINFO` | Show resolved values and errors without changing drawing content. |
-| `FIELDREMOVE` | Freeze all fields on selected hosts to their current cached text; undo restores the definitions. |
-| `DWGPROPS` | Edit drawing name, Title, Subject, Author, Keywords, Comments and typed custom properties. |
-| `FIELDTABLE` | Create a linked schedule for the selected source identities. |
-| `DATAEXTRACTION` | Existing CSV/JSON/snapshot output plus a linked-field table option. |
+| `FIELD` | Создание поля MTEXT или редактирование полей на выбранной аннотации, таблице или INSERT-е с атрибутами. |
+| `UPDATEFIELD` | Пересчёт всех нативных полей в чертеже; пустая операция не создаёт дополнительную запись отмены. |
+| `FIELDINFO` | Отображение разрешённых значений и ошибок без изменения содержимого чертежа. |
+| `FIELDREMOVE` | Фиксация всех полей на выбранных хостах в их текущем кэшированном тексте; отмена восстанавливает определения. |
+| `DWGPROPS` | Редактирование имени чертежа, заголовка, темы, автора, ключевых слов, комментариев и типизированных пользовательских свойств. |
+| `FIELDTABLE` | Создание связанного расписания для выбранных идентификаторов источника. |
+| `DATAEXTRACTION` | Существующий вывод CSV/JSON/снимка плюс опция связанной таблицы полей. |
 
-The Text ribbon has an **Associative annotations** group. Select a curve, use **Insert or edit field**, select its property, choose precision/output units and an insertion point, then create the field. New annotations use editable text height and paragraph width, not an arbitrary model-scale default. Positions use the current UCS; coordinate-valued source properties are world XYZ.
+Лента Text имеет группу **Associative annotations**. Выберите кривую, используйте **Insert or edit field**, выберите его свойство, укажите точность/единицы вывода и точку вставки, затем создайте поле. Новые аннотации используют редактируемую высоту текста и ширину абзаца, а не произвольный масштаб по умолчанию. Позиции используют текущий UCS; свойства-источники с координатными значениями — мировые XYZ.
 
-Selecting TEXT, MTEXT, LEADER, TABLE or a block reference with attributes edits that host instead of creating a second annotation. Choose an existing binding to load its settings or enter a new target. Table targets are zero-based `cell:row:column`; block targets are `attribute:TAG`. Changing the target adds or replaces that target; it does not delete other bindings. Double-click text editing opens the field template for a field-controlled annotation.
+Выбор TEXT, MTEXT, LEADER, TABLE или ссылки на блок с атрибутами редактирует этот хост вместо создания второй аннотации. Выберите существующую привязку для загрузки её настроек или введите новую цель. Таблицы — `cell:row:column` с нуля; блоки — `attribute:TAG`. Изменение цели добавляет или заменяет эту цель; оно не удаляет другие привязки. Двойной щелчок по редактируемому тексту открывает шаблон поля для аннотации, управляемой полем.
 
-The preview is read-only and uses literal DOM text, never injected HTML. Each opened editor owns its own event listeners. A stale dialog cannot overwrite a newer drawing edit or a different active document. Normal edits to a controlled text value are rejected with a clear instruction to edit the field or freeze it first. Styling, placement, source geometry and unconstrained cells remain editable.
+Предпросмотр доступен для чтения и использует буквальный DOM-текст, никогда не внедрённый HTML. Каждый открытый редактор владеет своими слушателями событий. Устаревший диалог не может перезаписать более позднюю правку чертежа или другой активный документ. Обычные правки управляемого текстового значения отклоняются с чёткой инструкцией сначала отредактировать поле или зафиксировать его. Стиль, размещение, исходная геометрия и непривязанные ячейки остаются редактируемыми.
 
-## References and numeric semantics
+## Ссылки и числовая семантика
 
-A single source uses `{{Value}}`. Multiple named sources use their names; an optional formula produces `{{Result}}`. Example definition on a text entity:
+Один источник использует `{{Value}}`. Несколько именованных источников используют свои имена; необязательная формула даёт `{{Result}}`. Пример определения для текстового объекта:
 
 ```json
 {
@@ -39,49 +39,50 @@ A single source uses `{{Value}}`. Multiple named sources use their names; an opt
 }
 ```
 
-Use actual stable entity IDs from the drawing, not the example ID. The formula/multiple-source mode exposes this source-descriptor array and the safe mathematical expression. Formulas use the existing Kestrel expression grammar, not JavaScript. Values stay numeric at full internal precision until formatting. Decimal places range from 0 to 12; trailing-zero suppression is optional. Formula variables must be numbers, not implicitly parsed display strings. Boolean literals display `true`/`false`.
+Используйте фактические стабильные ID объектов из чертежа, а не пример ID. Режим формулы/нескольких источников предоставляет этот массив дескрипторов источников и безопасное математическое выражение. Формулы используют существующую грамматику выражений Kestrel, а не JavaScript. Значения остаются числовыми с полной внутренней точностью до форматирования. Десятичные знаки — от 0 до 12; подавление завершающих нулей является необязательным. Переменные формул должны быть числами, а не неявно разобранными строками отображения. Булевы литералы отображаются как `true`/`false`.
 
-Supported sources:
+Поддерживаемые источники:
 
-- **Object properties:** ID, type, layer name, block name, length, enclosed area, circular radius/diameter, world insertion/center/start XYZ, text, named attribute, or a table cell. Use `tag` for attributes, and zero-based `row`/`column` for cells. Length is analytic for lines, circles, circular arcs and bulged polylines. Enclosed area includes full circles/ellipses and supported closed planar polylines. Open paths, spline/ellipse lengths and plain-mesh areas are not approximated from display triangles; incompatible requests are unresolved.
-- **Drawing metadata:** `{"kind":"drawing","property":"name"}`, `units`, or `entityCount`. The count includes all top-level objects, including annotations, not recursively expanded block members.
-- **Custom properties:** `{"kind":"property","key":"Title"}`. Names are case-sensitive for reference resolution and must be unique ignoring case. Values are strings, numbers or booleans, not arbitrary objects. This metadata is not filesystem metadata.
-- **Named parameters:** `{"kind":"parameter","domain":"sketch","parameter":"Width"}` or domain `spatial`. Values follow their existing solver parameter definitions, without additional inferred dimensional analysis.
-- **Literal values:** `{"kind":"literal","value":12.5}` or a string/boolean.
-- **Other fields:** `{"kind":"field","entity":"labelId","target":"text"}` or `cell:r:c`/`attribute:TAG`. A formula result, or the sole source of a simple field, is available as its raw numeric value. A multiple-source text template without a result is a string. Reading an object's text/cell/attribute instead returns its formatted display value.
-- **Fixed-set aggregates:** `{"kind":"aggregate","entities":["a","b"],"property":"length","method":"sum"}`. Methods are `count`, `sum`, `min`, `max` and `average`; dimensional properties are `length`, `area`, `volume` and `surfaceArea`. Count requires all identities to exist but not to support a measurement. Other methods require every source to support the property: missing members are not silently skipped.
+- **Свойства объектов:** ID, тип, имя слоя, имя блока, длина, площадь, радиус/диаметр окружности, мир. XYZ вставки/центра/начала, текст, именованный атрибут или ячейка таблицы. Для атрибутов используйте `tag`, для ячеек — `row`/`column` с нуля. Длина аналитическая для отрезков, окружек, дуг и полилиний с прогибом. Площадь включает полные окружки/эллипсы и поддерживаемые замкнутые плоские полилинии. Открытые контурные линии, длины сплайнов/эллипсов и площади обычных сеток не приближаются по треугольникам отображения; несовместимые запросы разрешаются.
+- **Метаданные чертежа:** `{"kind":"drawing","property":"name"}`, `units` или `entityCount`. Подсчёт включает все объекты верхнего уровня, включая аннотации, а не рекурсивно развёрнутые элементы блоков.
+- **Пользовательские свойства:** `{"kind":"property","key":"Title"}`. Имена чувствительны к регистру для разрешения ссылок и должны быть уникальными без учёта регистра. Значения — строки, числа или булевы, а не произвольные объекты. Эти метаданные не являются метаданными файловой системы.
+- **Именованные параметры:** `{"kind":"parameter","domain":"sketch","parameter":"Width"}` или домен `spatial`. Значения следуют их существующим определениям параметров решателя, без дополнительного вывода размерности.
+- **Литеральные значения:** `{"kind":"literal","value":12.5}` или строка/булево.
 
-Every descriptor also needs a unique valid `name`. `Result` is reserved for the formula result. Unknown template variables, duplicate variables, invalid identities and cycles reject atomically. Formula domain errors introduced by later source edits become visible unresolved results.
+- **Другие поля:** `{"kind":"field","entity":"labelId","target":"text"}` или `cell:r:c`/`attribute:TAG`. Результат формулы или единственный источник простого поля доступен как его необработанное числовое значение. Шаблон текста с несколькими источниками без результата — строка. Чтение текста/ячейки/атрибута объекта вместо этого возвращает его форматированное отображаемое значение.
+- **Фиксированные агрегаты:** `{"kind":"aggregate","entities":["a","b"],"property":"length","method":"sum"}`. Методы: `count`, `sum`, `min`, `max` и `average`; размерные свойства — `length`, `area`, `volume` и `surfaceArea`. Count требует существования всех идентификаторов, но не поддержки измерения. Другие методы требуют, чтобы каждый источник поддерживал свойство: отсутствующие элементы не пропускаются молча.
 
-Explicit `units` are supported for dimensional object/aggregate measurements; area uses the square and volume the cube of the conversion factor. Without them the value follows current drawing units. A physical-unit field in a unitless drawing is unresolved; no physical scale is invented. Default FIELDTABLE dimensional headers pin their output units so changing drawing units cannot leave a mislabeled column. Formulas have no currency, locale, date or implicit unit type system.
+Каждый дескриптор также требует уникальное валидное `name`. `Result` зарезервирован для результата формулы. Неизвестные переменные шаблона, дублирующиеся переменные, невалидные идентификаторы и циклы отклоняются атомарно. Ошибки домена формулы, введённые последующими правками источников, становятся видимыми неразрешёнными результатами.
 
-## Update, safety and history
+Явные `units` поддерживаются для размерных измерений объектов/агрегатов; площадь использует квадрат, а объём — куб коэффициента конвертации. Без них значение следует текущим единицам чертежа. Поле физических единиц в чертеже без единиц не разрешается; физический масштаб не изобретается. Заголовки по умолчанию для FIELDTABLE фиксируют свои выходные единицы, поэтому изменение единиц чертежа не может оставить неправильно подписанный столбец. Формулы не имеют валюты, локали, даты или неявной системы типов единиц.
 
-Fields are evaluated when loading native drawings and after each successful document transaction, following constraint solving and existing native associations. Derived values update in the same undo/redo step as their sources. A converted DXF export refreshes a private drawing copy even if supplied serialized cache values are stale. It does not change the caller's drawing.
+## Обновление, безопасность и история
 
-Deleted sources, unavailable properties, missing custom/named parameters and runtime arithmetic errors display **`####`**. `FIELDINFO` explains each unresolved target. Undoing the source change restores both its geometry and its field results. Automatic cache refresh can update a locked annotation's derived text; authoring or freezing a locked host is disallowed.
+Поля вычисляются при загрузке нативных чертежей и после каждой успешной транзакции документа, после решения ограничений и существующих нативных ассоциаций. Производные значения обновляются в том же шаге отмены/повтора, что и их источники. Преобразованный экспорт DXF обновляет приватную копию чертежа, даже если предоставленные сериализованные кэшированные значения устарели. Он не изменяет чертёж вызывающего модуля.
 
-Freezing a field keeps its displayed text, not its numeric binding. Numeric field-to-field dependents therefore become unresolved if their referenced binding is removed. Source-object text references can still read the remaining static string. A selected linked table can be frozen into an ordinary fully editable table.
+Удалённые источники, недоступные свойства, отсутствующие пользовательские/именованные параметры и арифметические ошибки рантайма отображают **`####`**. `FIELDINFO` объясняет каждую неразрешённую цель. Отмена правки источника восстанавливает как его геометрию, так и результаты поля. Автоматическое обновление кэша может обновить производный текст заблокированной аннотации; создание или фиксация заблокированного хоста не допускается.
 
-MTEXT templates may contain supported rich-text controls. Substituted values escape backslashes, braces and percent controls so source strings cannot inject formatting. Browser UI previews and reports use escaped/literal text. Existing non-MTEXT host conventions and native dynamic-attribute `${Parameter}` interpolation still apply; field output is not a universal escape layer for every text host.
+Фиксация поля сохраняет его отображаемый текст, а не его числовую привязку. Числовые зависимые поля поэтому становятся неразрешёнными, если их ссылочная привязка удалена. Ссылки на текст объекта-источника по-прежнему могут читать оставшуюся статическую строку. Выбранная связанная таблица может быть зафиксирована как обычная полностью редактируемая таблица.
 
-The evaluator is bounded: 4,096 bindings per drawing, 2,048 per host, 32 variables per field, dependency depth 32, 1,000 aggregate source identities, 128 custom properties, two million total template/output characters and an evaluation-step budget. These are resource guards, not throughput claims.
+Шаблоны MTEXT могут содержать поддерживаемые элементы форматирования. Подставленные значения экранируют обратные слэши, фигурные скобки и процентные элементы управления, поэтому строки источников не могут внедрять форматирование. Предпросмотры и отчёты UI браузера используют экранированный/буквальный текст. Существующие соглашения хостов, не-MTEXT, и интерполяция нативных динамических атрибутов `${Parameter}` по-прежнему действуют; вывод полей не является универсальным уровнем экранирования для каждого текстового хоста.
 
-## Clipboard and block boundaries
+Оценщик ограничен: 4 096 привязок на чертёж, 2 048 на хост, 32 переменных на поле, глубина зависимостей 32, 1 000 идентификаторов агрегатных источников, 128 пользовательских свойств, два миллиона символов шаблона/вывода и бюджет шагов вычисления. Это ограничения ресурсов, а не заявления о пропускной способности.
 
-Same-document geometry COPY remaps references to copied sources and retains valid references to uncopied sources in that document. Cross-document clipboard transfer remaps a complete copied object/field dependency set. It freezes bindings that need uncopied sources or source-document metadata/parameters, with a visible operation warning; partial numeric chains freeze transitively. It never accidentally binds an external source ID to an unrelated object in the destination drawing.
+## Буфер обмена и границы блоков
 
-This implementation resolves top-level entity IDs, not nested block member paths. INSERT attribute hosts are supported, including ordinary native dynamic-attribute source interpolation. Field-bearing objects cannot be placed into a shared block definition until their fields are frozen: definition-local IDs and instance-dependent field contexts are not falsely treated as global references. DWG dynamic-block field graphs are not supplied.
+Копирование геометрии того же документа переназначает ссылки на скопированные источники и сохраняет валидные ссылки на нескопированные источники в этом документе. Перенос буфера обмена между документами переназначает полный скопированный набор зависимостей объект/поле. Он фиксирует привязки, требующие нескопированных источников или метаданные/параметры документа-источника, с видимым предупреждением операции; частичные числовые цепочки фиксируются транзитивно. Он никогда случайно не привязывает внешний ID источника к несвязанному объекту в целевом чертеже.
 
-## Linked tables and interchange
+Эта реализация разрешает ID объектов верхнего уровня, а не пути вложенных элементов блоков. Хосты атрибутов INSERT поддерживаются, включая обычную интерполяцию нативных динамических атрибутов-источников. Объекты с полями не могут быть размещены в общее определение блока, пока их поля не зафиксированы: ID локальные для определения и контексты полей, зависящие от экземпляра, не ложно считаются глобальными ссылками. Графы полей динамических блоков DWG не предоставляются.
 
-FIELDTABLE creates a fixed selection schedule with one bound cell per source/column. It supports 1–250 distinct sources and 1–8 columns; source changes update in place without reordering rows or destroying row height, column width, text style or manually unbound headings. Missing/incompatible cells show `####`; new drawing objects are not appended automatically. Column JSON accepts `label`, `property`, optional `units`, `tag`, `row` and `column`. Formulas can be attached to any table cell via FIELD.
+## Связанные таблицы и обмен
 
-Native save/reopen keeps definitions, metadata and stable links. Normal ASCII/binary DXF contains the evaluated static TEXT, MTEXT, INSERT/ATTRIB and table graphics, not native fields or proprietary ACAD FIELD objects. Kestrel tables flatten to ordinary graphics in this exporter rather than pretending to be fully linked external TABLE records. Reimported standard DXF is static. Keep `.kcad` as the associative master. Source-preserving export retains its existing compatibility guards; this feature does not establish unrestricted DWG editing or original-field-graph regeneration.
+FIELDTABLE создаёт фиксированное расписание выделения с одной привязанной ячейкой на источник/столбец. Он поддерживает 1–250 уникальных источников и 1–8 столбцов; правки источников обновляются на месте без перестановки строк или уничтожения высоты строки, ширины столбца, стиля текста или вручную отвязанных заголовков. Отсутствующие/несовместимые ячейки отображают `####`; новые объекты чертежа не добавляются автоматически. Столбец JSON принимает `label`, `property`, необязательные `units`, `tag`, `row` и `column`. Формулы могут быть прикреплены к любой ячейке таблицы через FIELD.
 
-This is not DXE/DXEX file compatibility, external spreadsheet/database DATALINK, automatic model-set extraction, Date/Sheet Set fields, FIELDEVAL event-bitmask compatibility, or an interpreter for imported `%<...>%` codes. Those imported codes remain literal and are never executed as native formulas.
+Нативное сохранение/переоткрытие хранит определения, метаданные и стабильные ссылки. Обычный ASCII/бинарный DXF содержит вычисленный статический TEXT, MTEXT, INSERT/ATTRIB и графику таблиц, а не нативные поля или проприетарные объекты ACAD FIELD. Таблицы Kestrel уплощаются до обычной графики в этом экспортёре, а не претендуют на полностью связанные внешние записи TABLE. Реимпортированный стандартный DXF является статическим. Сохраняйте `.kcad` как ассоциативный мастер. Экспорт с сохранением исходника сохраняет свои существующие ограничения совместимости; эта функция не устанавливает неограниченное редактирование DWG или регенерацию исходного графа полей.
 
-## Reproducible verification
+Это не совместимость с файлами DXE/DXEX, внешняя электронная таблица/база данных DATALINK, автоматическое извлечение набора моделей, поля Date/Sheet Set, совместимость с битовой маской событий FIELDEVAL или интерпретатор импортированных кодов `%<...>%`. Эти импортированные коды остаются буквальными и никогда не выполняются как нативные формулы.
+
+## Воспроизводимая верификация
 
 ```sh
 node tests/fields.test.js
@@ -91,16 +92,16 @@ python3 tests/fields_interop.py
 python3 tools/verify.py --previews
 ```
 
-The core suite checks analytic geometry, units, formulas, dependency graphs, validation, history, persistence and static output. The browser suite uses real controls, renderer composition, clipboard, save/download and exchange worker paths. The independent ezdxf suite requires zero audit errors and zero repairs for both ASCII and binary field output, including the actual browser-worker fixture. All conventionally named suites are included automatically by the full verifier. Hardware WebGPU and native DWG-codec verification remain distinct paths.
+Основной набор проверяет аналитическую геометрию, единицы, формулы, графы зависимостей, валидацию, историю,持久ность и статический вывод. Набор браузера использует реальные элементы управления, композицию рендерера, буфер обмена, сохранение/загрузку и пути воркера обмена. Независимый набор ezdxf требует нуля ошибок аудита и нуля исправлений для ASCII и бинарного вывода полей, включая фактическую фикстуру браузер-воркера. Все обычно именованные наборы включаются автоматически полным средством проверки. Аппаратный WebGPU и проверка нативного кодека DWG остаются отдельными путями.
 
-Primary workflow references: [FIELD](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-742C92C3-1284-4722-B650-C46F9191C701.htm), [UPDATEFIELD](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-2B47D62E-19D0-4CA5-9AAC-1946132D2F62.htm), and [attribute extraction](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-BA68DD22-A3CD-4538-90A9-6101C33BC963.htm). Command names identify familiar workflows; the schema, automatic update policy and supported behavior described here are Kestrel-native, not a claim of binary or semantic parity.
+Основные рабочие документы: [FIELD](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-742C92C3-1284-4722-B650-C46F9191C701.htm), [UPDATEFIELD](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-2B47D62E-19D0-4CA5-9AAC-1946132D2F62.htm) и [извлечение атрибутов](https://help.autodesk.com/cloudhelp/2026/ENU/AutoCAD-Core/files/GUID-BA68DD22-A3CD-4538-90A9-6101C33BC963.htm). Имена команд указывают на знакомые рабочие процессы; схема, политика автоматического обновления и поддерживаемое поведение, описанные здесь, являются собственными для Kestrel и не претендуют на бинарное или семантическое равенство.
 
-## Native-solid quantities
+## Количество нативных тел
 
-`volume` and `surfaceArea` read the kernel-generated native quantity caches and account for the body's current placement. They never derive a solid quantity from a display mesh. FIELD exposes both properties; FIELDTABLE defaults to volume and surface-area columns when every selected source is a closed native solid. Formulas and fixed-set aggregates retain raw numbers, and explicit output units convert volumes cubically and areas quadratically. These are geometric quantities, not a material-density or physical-mass database.
+`volume` и `surfaceArea` читают кэши нативных количеств, сгенерированные ядром, и учитывают текущее размещение тела. Они никогда не выводят количество тела из отображаемой сетки. FIELD предоставляет оба свойства; FIELDTABLE по умолчанию использует столбцы объёма и площади поверхности, когда каждый выбранный источник — замкнутое нативное тело. Формулы и фиксированные агрегаты сохраняют необработанные числа, а явные выходные единицы конвертируют объёмы кубически и площади квадратично. Это геометрические количества, а не база данных плотности материала или физической массы.
 
-Volume supports invertible affine transforms via the absolute linear determinant, including reflection, nonuniform scale and shear. It requires at least one closed native solid. Area supports rigid motion, reflection and uniform scale; a nonuniform/sheared placement is unresolved and explicitly requires native recomputation. Open native sheets may expose area but never a solid volume. Projective placements, corrupted mesh caches and plain meshes are rejected. A later unsupported source edit displays `####`, with the original edit and diagnostic undoable together.
+Объём поддерживает обратимые аффинные преобразования через абсолютный линейный определитель, включая отражение, неравномерное масштабирование и сдвиг. Он требует хотя бы одно замкнутое нативное тело. Площадь поддерживает движение, отражение и равномерное масштабирование; неравномерное/скошенное размещение не разрешается и явно требует нативного пересчёта. Открытые нативные листы могут предоставлять площадь, но никогда объём тела. Проективные размещения, повреждённые кэши сеток и обычные сетки отклоняются. Более поздняя неподдерживаемая правка источника отображает `####`, с возможностью отмены исходной правки и диагностики одновременно.
 
-The caches originate in the native kernel; field evaluation does not contact the bridge or independently parse/reauthenticate BREP bytes. It trusts a structurally valid native project. Numeric field limits still apply. Overlapping separate source objects summed in an aggregate are **not** a material union; use interference/Boolean workflows for that distinction. Centroids, inertia tensors and automatic per-face material quantities are not introduced here. Keep `.kcad` for live links; ordinary DXF exports evaluated static annotations.
+Кэши возникают в нативном ядре; вычисление полей не обращается к мосту и не парсит/аутентифицирует байты BREP независимо. Оно доверяет структурно валидному нативному проекту. Числовые ограничения полей по-прежнему действуют. Перекрывающиеся отдельные объекты-источники, суммированные в агрегате, **не** являются материальным объединением; для этого различия используйте рабочие процессы помех/булевых операций. Центры тяжести, тензоры инерции и автоматические количества материала по граням здесь не вводятся. Сохраняйте `.kcad` для актуальных ссылок; обычный DXF экспортирует вычисленные статические аннотации.
 
-Verification: `python3 tests/field-quantities.test.py`, `python3 tests/field-quantities.browser.py`, and `python3 tests/field_quantities_interop.py`. The first uses actual OCCT-created boxes, cavities, curved solids and sheets. Browser fixtures carry those genuine native bodies; no geometry API responses are fabricated. The default new browser suite navigates the real standalone file. `KESTREL_TEST_MODE=dom` opts into a recorded offline DOM diagnostic without testing file/HTTP transport.
+Верификация: `python3 tests/field-quantities.test.py`, `python3 tests/field-quantities.browser.py` и `python3 tests/field_quantities_interop.py`. Первый использует реальные коробки, полости, изогнутые тела и листы, созданные OCCT. Фикстуры браузера несут эти подлинные нативные тела; ни один ответ API геометрии не fabricated. Новый набор браузера по умолчанию навигирует реальный автономный файл. `KESTREL_TEST_MODE=dom` включает записанный офлайн DOM-диагностический режим без проверки файлового/HTTP-транспорта.

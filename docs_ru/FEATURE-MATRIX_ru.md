@@ -1,23 +1,23 @@
-# CAD feature boundaries
+# Границы функций CAD
 
-This matrix describes implementation boundaries, not certification of AutoCAD equivalence. A passing regression suite demonstrates the exercised cases, not arbitrary-file compatibility.
+Эта матрица описывает границы реализации, а не сертификацию совместимости с AutoCAD. Прохождение регрессионного набора демонстрирует проверенные случаи, а не совместимость с произвольными файлами.
 
-| Area | Integrated implementation | Remaining compatibility work |
+| Область | Интегрированная реализация | Оставшаяся работа по совместимости |
 | --- | --- | --- |
-| Drafting | Editable analytic curves, layers, blocks, annotations, layouts, precision input and undo | Additional commercial command variants and paper-space interaction |
-| Productivity | Quick selection, counts, analytic DIVIDE/MEASURE, LENGTHEN/REVERSE, extraction, fixed-selection linked field tables and validated layer states | External data links, dynamic selection schedules and additional curve station types |
-| Native solids | Optional local OpenCascade B-rep worker; primitives, profiles, Booleans, edges, slicing, single-face thickening, mass properties and STEP/BREP; geometry-only planar SAT/SAB and native-solid DXF; editable native edge/section curves and rational spline profiles; native interference/clearance reports and overlap retention | Curved/general ACIS/SAT/SAB translation, persistent topological naming and additional surface operations |
-| Constraints | Native planar and world-XYZ geometric/dimensional solvers; rigid-body hinge, slider, coaxial, plane and fastened mates, parameters, joint travel limits/drivers, diagnostics and rollback | Flexible conics/splines in 3D, general solid contacts, persistent topological references and proprietary DWG graphs |
-| Configurable blocks | Native typed parameters, expressions, lookup, visibility, flip, move/stretch/rotate/scale and rectangular/polar arrays and coordinated polar stretching; inverse discrete-table matching | Autodesk proprietary action-graph evaluation and native DWG dynamic-block compatibility |
-| Text | Local SHX/SHP and browser outline fonts; Unicode annotation Find/Replace with style-preserving edits; native rich MTEXT with scopes, fractions, paragraphs, Unicode bidi runs, masks and native columns; native associative fields, safe formulas and drawing properties | Proprietary/Date/Sheet Set fields, linked-column DXF, vertical MTEXT, Big Fonts and complete font/layout equivalence |
-| Source files | Original ASCII/binary DXF archives, byte-identical original recovery, guarded compatible record edits and optional local DWG conversion | Unrestricted DWG editing, opaque-object regeneration and complete application-specific data fidelity |
+| Черчение | Редактируемые аналитические кривые, слои, блоки, аннотации, макеты, точный ввод и отмена | Дополнительные коммерческие варианты команд и взаимодействие с пространством бумаги |
+| Продуктивность | Быстрый выбор, подсчёт, аналитические DIVIDE/MEASURE, LENGTHEN/REVERSE, извлечение, связанные таблицы полей с фиксированным выделением и проверенные состояния слоёв | Внешние ссылки на данные, динамические расписания выбора и дополнительные типы станций кривых |
+| Нативные тела | Опциональный локальный воркер OpenCascade B-rep; примитивы, профили, булевы операции, рёбра, разрезание, одногранное утолщение, массовые свойства и STEP/BREP; плоский SAT/SAB и нативный DXF тел; редактируемые нативные кривые рёбер/сечений и рациональные сплайновые профили; нативные отчёты помех/зазоров и сохранение перекрытий | Криволинейные/общий перевод ACIS/SAT/SAB, persistentное топологическое именование и дополнительные операции с поверхностями |
+| Ограничения | Нативные плоские и мировые XYZ геометрические/размерные решатели; шарнир, ползунок, соосная, плоскость и жёсткая связи сборки, параметры, ограничения/драйверы перемещения суставов, диагностика и откат | Гибкие коники/сплайны в 3D, общие контакты тел, persistentные топологические ссылки и графы ограничений DWG |
+| Настраиваемые блоки | Нативные типизированные параметры, выражения, поиск, видимость, отражение, перемещение/растяжение/поворот/масштабирование и прямоугольные/полярные массивы, а также согласованное полярное растяжение; обратный дискретный поиск по таблице | Проприетарная оценка графов действий Autodesk и совместимость с нативными DWG динамическими блоками |
+| Текст | Локальные шрифты SHX/SHP и контурные шрифты браузера; поиск/замена Unicode-аннотаций с сохранением стиля; нативный богатый MTEXT с областями, дробями, абзацами, Unicode- bidi-.runs, масками и нативными колонками; нативные ассоциативные поля, безопасные формулы и свойства чертежа | Проприетарные/Date/Sheet Set поля, связанные колонки DXF, вертикальный MTEXT, Big Fonts и полное соответствие шрифтов/компоновки |
+| Исходные файлы | Оригинальные ASCII/бинарные архивы DXF, восстановление оригинала байт-в-байт, защищённые совместимые правки записей и опциональная локальная конвертация DWG | Неограниченное редактирование DWG, регенерация непрозрачных объектов и полная достоверность данных конкретного приложения |
 
-## Runtime boundaries
+## Границы рантайма
 
-Core drafting, constraints, configurable blocks and text run in plain JavaScript. Native solid operations require the local Python bridge. GitHub Pages displays saved native bodies but does not execute the Python kernel. Font files are supplied by the user and are not redistributed. Actual DWG codec and hardware-WebGPU verification must be reported separately from mocked bridge or Canvas tests.
+Основное черчение, ограничения, настраиваемые блоки и текст работают на чистом JavaScript. Операции с нативными телами требуют локального Python-моста. GitHub Pages отображает сохранённые нативные тела, но не запускает Python-ядро. Файлы шрифтов предоставляются пользователем и не распространяются. Фактический кодек DWG и аппаратная проверка WebGPU должны сообщаться отдельно от тестов моста или Canvas.
 
-## PR #11 integration repair
+## Исправление интеграции PR #11
 
-The prior branch contained productivity source but did not load it. The repaired source loads the core and UI modules directly in the application, includes core validation in the exchange worker, installs the UI synchronously, and validates untrusted saved layer states. Redundant self-modifying completion scripts are removed. Current main's DXF precision, significant-space and Unicode-block fixes are retained. The complete CI suite must pass on this final readable source before merge.
+Предыдущая ветка содержала исходный код продуктивности, но не загружала его. Исправленный исходник загружает основные и UI-модули непосредственно в приложении, включает основную проверку в воркере обмена, синхронно устанавливает интерфейс и проверяет недоверенные сохранённые состояния слоёв. Избыточные самомодифицирующиеся скрипты завершения удалены. Исправления точности DXF, значимых пробелов и Unicode-блоков из текущей main сохранены. Полный набор CI должен пройти на этом финальном читаемом исходнике перед слиянием.
 
-Native annotation fields additionally expose placed B-rep volume and similarity-transformed surface area, formula/aggregate use, and quantity-table defaults. They use kernel-origin caches, not an ACIS/DWG field evaluator or display-mesh measurements; see [FIELDS.md](FIELDS.md#native-solid-quantities).
+Нативные поля аннотаций дополнительно предоставляют размещённый объём B-rep и площадь поверхности с преобразованием подобия, использование формул/агрегатов и значения по умолчанию для таблиц количества. Они используют кэши из ядра, а не оценщик полей ACIS/DWG или измерения отображаемой сетки; см. [FIELDS.md](FIELDS.md#native-solid-quantities).

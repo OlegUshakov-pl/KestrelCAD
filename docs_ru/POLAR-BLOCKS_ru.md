@@ -1,10 +1,10 @@
-# Polar configurable blocks and inverse lookup matching
+# Полярные настраиваемые блоки и обратный поиск по таблице
 
-These features extend the existing plain-JavaScript configurable-block evaluator. The original definition is never progressively deformed: each instance regenerates from its unchanged source geometry, then the INSERT placement is applied.
+Эти функции расширяют существующий оценщик настраиваемых блоков на чистом JavaScript. Исходное определение никогда не деформируется постепенно: каждый экземпляр регенерируется из неизменённой исходной геометрии, затем применяется размещение INSERT.
 
-## Polar action authoring
+## Создание полярных действий
 
-Select an INSERT with a configurable definition and run `BACTION`, or choose **Blocks → Add block action**. Select `polar-array`, enter the item count and fill-angle expressions, specify the local center and axis, and choose the geometry/attribute targets. To retain the group's original orientation, turn off **Rotate polar items** and enter its explicit shared base point.
+Выберите INSERT с настраиваемым определением и выполните `BACTION` или выберите **Blocks → Add block action**. Выберите `polar-array`, введите выражения количества элементов и угла заполнения, укажите локальный центр и ось и выберите цели геометрии/атрибутов. Чтобы сохранить исходную ориентацию группы, отключите **Rotate polar items** и введите явную общую базовую точку.
 
 ```json
 {
@@ -19,21 +19,21 @@ Select an INSERT with a configurable definition and run `BACTION`, or choose **B
 }
 ```
 
-Count is an integer from 1 through 20,000, including the original item. Positive fill angles rotate by the right-hand rule around the supplied axis; negative angles reverse traversal. Magnitude must be at least 1e-9 degrees and no greater than 360. A full 360-degree turn divides by the count and omits the duplicate seam. A partial sweep divides by count minus one, including both angular endpoints. Count 1 retains only the original item. The default fill is 360 and the default axis is local +Z.
+Количество — целое число от 1 до 20 000, включая исходный элемент. Положительные углы заполнения поворачивают по правилу правой руки вокруг указанной оси; отрицательные углы меняют направление обхода. Величина должна быть не менее 1e-9 градусов и не более 360. Полный поворот на 360 градусов делится на количество и пропускает дублирующий стык. Частичный размах делится на количество минус один, включая оба угловых конца. Количество 1 сохраняет только исходный элемент. Заполнение по умолчанию — 360, ось по умолчанию — локальная +Z.
 
-When items rotate, each source member uses the same rigid rotation around the center. When they do not, the **whole target group** translates by `rotation(base) - base`. The base is an explicit fixed coordinate at this action stage, not an inferred per-object center or a persistent geometric attachment. Its distance from the axis controls the orbit. The axis may be any nonzero 3D vector; view direction and UCS do not flatten it.
+Когда элементы поворачиваются, каждый исходный элемент использует один и тот же жёсткий поворот вокруг центра. Когда они не поворачиваются, **вся целевая группа** перемещается на `rotation(base) - base`. База — это явная фиксированная координата на этом этапе действия, а не неявный центр для каждого объекта или постоянная геометрическая привязка. Её расстояние от оси определяет орбиту. Ось может быть любым ненулевым 3D-вектором; направление взгляда и UCS не уплощают его.
 
-Actions remain ordered. Later moves, visibility states and other arrays act on every descendant of their targeted source IDs. Native solid members retain BREP data and transform their authoritative placement together with the display mesh. Interpolated attributes participate as visible geometry, not independent ATTDEF records in the evaluated DXF.
+Действия остаются упорядоченными. Более поздние перемещения, состояния видимости и другие массивы действуют на каждого потомка их целевых ID-источников. Элементы нативных тел сохраняют данные BREP и совместно преобразуют своё авторитетное размещение с отображаемой сеткой. Интерполированные атрибуты участвуют как видимая геометрия, а не независимые записи ATTDEF в вычисленном DXF.
 
-Array budgets are checked before allocation. Excess generated objects, nonfinite expressions, invalid axes and colliding/overlong output identifiers reject rather than produce partial geometry. Definition authoring validates input before JSON cloning, preventing NaN/Infinity from silently becoming omitted/default settings.
+Бюджеты массивов проверяются перед выделением. Избыточные сгенерированные объекты, неконечные выражения, невалидные оси и конфликтующие/слишком длинные выходные идентификаторы отклоняются вместо создания частичной геометрии. Создание определения проверяет вход перед клонированием JSON, предотвращая молчаливое превращение NaN/Infinity в пропущенные/стандартные настройки.
 
-## Match lookup outputs to a selector
+## Соответствие результата поиска селектору
 
-Select a configurable INSERT and run `BLOOKUPMATCH`, or choose **Blocks → Match lookup properties**. Pick the lookup table, enter its numeric/boolean output values, and apply. Exactly one row must match. Its enum selector is updated through the existing transactional parameter editor, recomputing all lookup outputs, dependent expressions, geometry and attribute templates together.
+Выберите настраиваемый INSERT и выполните `BLOOKUPMATCH` или выберите **Blocks → Match lookup properties**. Выберите таблицу поиска, введите её числовые/булевы значения выходов и примените. Ровно одна строка должна совпасть. Её enum-селектор обновляется через существующий транзакционный редактор параметров, пересчитывая все выходы поиска, зависимые выражения, геометрию и шаблоны атрибутов одновременно.
 
-Unmatched rows and ambiguous duplicate output tuples produce explicit errors with no mutation. Forward selection of an enum label still works for such tables. This is discrete row matching, not interpolation, range evaluation or an automatic Custom state.
+Несовпавшие строки и неоднозначные дублирующиеся кортежи выходов выдают явные ошибки без мутации. Прямой выбор метки enum по-прежнему работает для таких таблиц. Это дискретное сопоставление строк, а не интерполяция, оценка диапазона или автоматическое состояние Custom.
 
-The browser-independent API supports partial criteria as long as they identify one row:
+API, независимый от браузера, поддерживает частичные критерии, если они идентифицируют одну строку:
 
 ```js
 const D = Kestrel.DynamicBlocks;
@@ -43,17 +43,17 @@ D.setLookupValues(drawing, insertId, 'Fastener', {HoleRadius: 4});
 // Throws if there are zero or multiple matches; otherwise returns the chosen label.
 ```
 
-Criteria must name declared lookup outputs with their exact numeric/boolean types. Strings are not converted into numbers. Numeric equality permits floating-point roundoff within `16 * Number.EPSILON * max(1, |a|, |b|)`; it does not use the much looser parameter value-set tolerance to collapse distinct table rows. Criteria are expressed in the definition's local units, just like the existing parameter editor.
+Критерии должны называть объявленные выходы поиска с их точными числовыми/булевыми типами. Строки не преобразуются в числа. Числовое равенство допускает округление с плавающей точкой в пределах `16 * Number.EPSILON * max(1, |a|, |b|)`; оно не использует гораздо более грубый допуск набора значений параметров для объединения различных строк таблицы. Критерии выражаются в локальных единицах определения, как и существующий редактор параметров.
 
-The form uses all outputs in the selected table and replaces them when switching tables. It rejects application after a document switch or intervening edit. Locked instances cannot be changed. A successful match is one undoable parameter change and never stores overrides for read-only driven values.
+Форма использует все выходы в выбранной таблице и заменяет их при переключении таблиц. Она отклоняет применение после переключения документа или промежуточной правки. Заблокированные экземпляры не могут быть изменены. Успешное совпадение — это одно отменяемое изменение параметра, и никогда не сохраняются замены для доступных только для чтения управляемых значений.
 
-## Persistence and exchange
+##持久ность и обмен
 
-Native `.kcad` keeps actions, definitions, lookup tables and independent overrides. Existing definition-aware clipboard transfer preserves the editable behavior; destination-unit scaling remains in the INSERT transform. Standard DXF output carries evaluated static BLOCK/INSERT geometry with interpolated text and correct circular OCS data. It does not encode the native behavior as proprietary evaluation records. Source-preserving export keeps its existing guards instead of claiming an equivalent edited action graph.
+Нативный `.kcad` хранит действия, определения, таблицы поиска и независимые замены. Существующий осведомлённый о определениях буфер обмена сохраняет редактируемое поведение; масштабирование единиц назначения остаётся в преобразовании INSERT. Стандартный вывод DXF несёт вычисленную статическую геометрию BLOCK/INSERT с интерполированным текстом и корректными круговыми OCS-данными. Он не кодирует нативное поведение как проприетарные записи оценки. Экспорт с сохранением исходника сохраняет свои существующие ограничения вместо претензий на эквивалентный отредактированный граф действий.
 
-This is not complete AutoCAD dynamic-block or associative-array compatibility. It does not add native DWG evaluator records, automatic lookup grips, range/interpolated lookup values, per-item overrides, associative external path arrays or persistent geometric base-point references.
+Это не полная совместимость динамических блоков или ассоциативных массивов AutoCAD. Он не добавляет нативные записи оценщика DWG, автоматические ручки поиска, значения поиска по диапазону/интерполяции, замены для элементов, ассоциативные внешние пути массивов или постоянные геометрические ссылки на базовые точки.
 
-## Verification
+## Верификация
 
 ```sh
 node tests/polar-block.test.js
@@ -63,8 +63,8 @@ python3 tests/polar-block-native.test.py
 python3 tests/polar_blocks_interop.py
 ```
 
-Numerical checks cover exact positions, analytic curves, ordered actions, per-instance regeneration, identity safety, native persistence, inverse matching and rollback. Browser checks exercise the real ribbon, authoring and property forms, command alias, undo/redo, clipboard and worker/download paths. Native checks use actual OCCT BREP and STEP output, not synthetic kernel responses. Independent ezdxf audits require zero errors or automatic fixes. These suites are automatically included by `tools/verify.py`; hardware WebGPU remains a separately unverified path.
+Числовые проверки охватывают точные позиции, аналитические кривые, упорядоченные действия, регенерацию для экземпляров, безопасность идентификаторов, нативную持久ность, обратное сопоставление и откат. Проверки браузера используют реальную ленту, формы создания и свойств, псевдонимы команд, отмену/повтор, буфер обмена и пути воркера/загрузок. Нативные проверки используют реальный BREP OCCT и вывод STEP, а не синтетические ответы ядра. Независимые аудиты ezdxf требуют нуля ошибок или автоматических исправлений. Эти наборы автоматически включаются `tools/verify.py`; аппаратный WebGPU остаётся отдельным непроверенным путём.
 
-Primary workflow references: [polar arrays](https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Core/files/GUID-A6E74297-2CB3-4B1C-A07B-69CD08630052.htm) and [lookup actions](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-LT/files/GUID-AA47163A-9ECC-49FE-92DB-AB05D2691E1C.htm). The schema and evaluator here are Kestrel-native implementations, not a claim of identical proprietary serialization or UI behavior.
+Основные рабочие документы: [полярные массивы](https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Core/files/GUID-A6E74297-2CB3-4B1C-A07B-69CD08630052.htm) и [действия поиска](https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-LT/files/GUID-AA47163A-9ECC-49FE-92DB-AB05D2691E1C.htm). Схема и оценщик здесь являются собственными реализациями Kestrel, а не претензией на идентичную проприетарную сериализацию или поведение UI.
 
-Polar-stretch actions are described separately in [POLAR-STRETCH.md](POLAR-STRETCH.md).
+Полярные действия растяжения описаны отдельно в [POLAR-STRETCH.md](POLAR-STRETCH.md).

@@ -1,18 +1,18 @@
-# Inserting drawings with associative annotations
+# Вставка чертежей с ассоциативными аннотациями
 
-Insert drawing uses the same definition-aware transfer as the native clipboard. It builds the complete source-to-destination entity identity map before copying object, aggregate, and field-to-field descriptors. Existing destination objects with identical source IDs are never used as replacement dependencies.
+Вставка чертежа использует тот же перенос с осознанием определений, что и нативный буфер обмена. Он строит полную карту идентификации объектов источника и назначения перед копированием объектов, агрегатов и дескрипторов поля-к-полю. Существующие объекты назначения с идентичными ID источника никогда не используются как зависимости замены.
 
-The source project is validated and its annotation caches refreshed in its own drawing context before transfer. Source drawing properties and named-parameter fields that cannot keep their original context are frozen to those refreshed values. Dependent field-to-field links are frozen transitively, with a warning. The source project and caller's serialized data are not mutated.
+Проект источника проверяется, а его кэши аннотаций обновляются в его собственном контексте чертежа перед переносом. Свойства чертежа-источника и именованные параметрические поля, которые не могут сохранить свой исходный контекст, фиксируются этими обновлёнными значениями. Зависимые связи поля-к-полю фиксируются транзитивно с предупреждением. Проект источника и сериализованные данные вызывающего модуля не изменяются.
 
-Layers, block definitions, dimension and text styles, supported associations, and complete supported constraint groups follow the existing clipboard transfer semantics. Geometry and live measurements use destination units, while explicit physical field units stay stable. Original source-file archives are not copied into the destination.
+Слои, определения блоков, стили размеров и текста, поддерживаемые ассоциации и полные поддерживаемые группы ограничений следуют существующей семантике переноса буфера обмена. Геометрия и актуальные измерения используют единицы назначения, тогда как явные физические единицы полей остаются стабильными. Архивы исходных файлов не копируются в назначение.
 
-The complete insertion is one transaction: undo restores the destination, and redo restores inserted identities and dependencies. Invalid projects fail before insertion; transfer failures roll back the transaction.
+Полная вставка — одна транзакция: отмена восстанавливает назначение, повтор восстанавливает вставленные идентификаторы и зависимости. Невалидные проекты завершаются неудачей перед вставкой; ошибки переноса откатывают транзакцию.
 
-## Regression checks
+## Проверки регрессии
 
 ```sh
 python3 tools/build.py
 python3 tests/fields-insert.browser.py
 ```
 
-Eight real browser checks exercise App.insertData with colliding destination IDs, forward and aggregate dependencies, stale source caches, source-context freezing, unit conversion, block attributes, undo/redo, and malformed-input rollback. This suite is automatically discovered by tools/verify.py. Full CI remains required before merge; this fix does not expand proprietary DWG field compatibility.
+Восемь реальных проверок в браузере проверяют App.insertData с конфликтующими ID назначения, прямыми и агрегатными зависимостями, устаревшими кэшами источника, фиксацией контекста источника, конвертацией единиц, атрибутами блоков, отменой/повтором и откатом невалидного ввода. Этот набор автоматически обнаруживается tools/verify.py. Полный CI остаётся обязательным перед слиянием; это исправление не расширяет совместимость проприетарных полей DWG.
