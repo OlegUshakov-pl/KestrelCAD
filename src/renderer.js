@@ -59,7 +59,7 @@
         }
     } return hex; }
     class Renderer {
-        constructor(canvas, overlay, camera) { this.canvas = canvas; this.overlay = overlay; this.camera = camera; this.ctx = overlay.getContext('2d'); this.backend = 'Starting'; this.device = null; this.sceneKey = ''; this.gridKey = ''; this.origin = [0, 0, 0]; this.theme = 'dark'; this.style = 'wireframe'; this.grid = true; this.lineweights = false; this.stats = { segments: 0, triangles: 0, cpuMs: 0, drawCalls: 0 }; this.buffers = {}; this.onBackend = () => { }; this.onError = () => { }; this.drawOverlay = () => { }; this.width = 0; this.height = 0; this.gpuErrors = []; this.fallbackReason = ''; }
+        constructor(canvas, overlay, camera) { this.canvas = canvas; this.overlay = overlay; this.camera = camera; this.ctx = overlay.getContext('2d'); this.backend = 'Starting'; this.device = null; this.sceneKey = ''; this.gridKey = ''; this.origin = [0, 0, 0]; this.theme = 'dark'; this.style = 'wireframe'; this.grid = true; this.lineweights = false; this.stats = { segments: 0, triangles: 0, cpuMs: 0, drawCalls: 0 }; this.buffers = {}; this.onBackend = () => { }; this.onError = () => { }; this.drawOverlay = () => { }; this.width = 0; this.height = 0; this.gpuErrors = []; this.fallbackReason = ''; this.texts = []; this.fallbackLines = []; this.fallbackTriangles = []; }
         async init(forceFallback = false) {
             if (!forceFallback && navigator.gpu) {
                 try {
@@ -147,7 +147,8 @@
             this.fallbackTriangles = [];
             const addLine = (s, color, width, dash) => { lines.push(...V.sub(s[0], this.origin), ...V.sub(s[1], this.origin), ...color, width, dash); this.fallbackLines.push({ s, color, width, dash }); };
             let triCount = 0, entityCount = 0;
-            for (const {e, owner} of (K.Production?.renderEntities ? K.Production.renderEntities(doc) : doc.entities.map(e=>({e,owner:e.id})))) {
+            const renderEntities = K.Production?.renderEntities ? K.Production.renderEntities(doc) : doc.entities.map(e=>({e,owner:e.id}));
+            for (const {e, owner} of renderEntities) {
                 if (!doc.visible(e))
                     continue;
                 entityCount++;
@@ -157,7 +158,7 @@
                 const isMesh = e.type === 'MESH', linetype = e.linetype === 'ByLayer' || !e.linetype ? layer.linetype : e.linetype, dash = /center/i.test(linetype) ? 2 : /dash/i.test(linetype) ? 1 : 0, width = selected ? 2.1 : this.lineweights ? Math.max(.8, (e.lineweight || layer.lineweight || .25) * 4) : isMesh ? .75 : 1.05;
                 if (!(isMesh && this.style === 'shaded')) {
                     const edgeColor = isMesh && this.style !== 'wireframe' && !selected ? rgba(this.theme === 'dark' ? '#13222e' : '#314958', .62) : color;
-                    for (const s of (isMesh && this.style === 'wireframe' ? g.wireSegments || g.segments : g.segments))
+                    for (const s of (isMesh && this.style === 'wireframe' ? g.wireSegments || g.segments || [] : g.segments || []))
                         addLine(s, edgeColor, width, dash);
                 }
                 if (!isMesh || this.style !== 'wireframe') {
@@ -171,7 +172,7 @@
                         triCount++;
                     }
                 }
-                for (const t of g.texts)
+                for (const t of g.texts || [])
                     this.texts.push({ t, color: selected ? '#63d7eb' : col, alpha: locked ? .4 : 1, dimension: e.type === 'DIMENSION', selected });
             }
             this.stats.segments = lines.length / 12;
@@ -314,7 +315,7 @@
             };
             for (const l of this.gridLines)
                 drawLine(l);
-            const triangles = this.fallbackTriangles.map(t => ({ ...t, p: t.points.map(p => this.camera.project(p)) })).filter(t => t.p.every(p => p[2] >= 0 && p[2] <= 1)).sort((a, b) => b.p.reduce((s, p) => s + p[2], 0) - a.p.reduce((s, p) => s + p[2], 0));
+            const triangles = (this.fallbackTriangles || []).map(t => ({ ...t, p: t.points.map(p => this.camera.project(p)) })).filter(t => t.p.every(p => p[2] >= 0 && p[2] <= 1)).sort((a, b) => b.p.reduce((s, p) => s + p[2], 0) - a.p.reduce((s, p) => s + p[2], 0));
             let depth = null, image = null;
             if (triangles.length && this.style !== 'wireframe' && this.style !== 'xray') {
                 // A full-resolution software depth/color pass avoids painter-order
@@ -368,7 +369,7 @@
                 }
             }
             if (image) c.putImageData(image, 0, 0);
-            for (const l of this.fallbackLines)
+            for (const l of this.fallbackLines || [])
                 drawLine(l, depth);
             c.setLineDash([]);
             this.stats.drawCalls = 0;
@@ -379,7 +380,7 @@
             c.clearRect(0, 0, this.width, this.height);
             c.lineJoin = 'round';
             c.lineCap = 'round';
-            for (const { t, color, alpha, dimension, selected } of this.texts) {
+            for (const { t, color, alpha, dimension, selected } of this.texts || []) {
                 if(t.composition && K.MText){K.MText.draw(c,t,p=>this.camera.project(p),color,alpha,this.theme,selected);continue;}
                 if(K.Fonts && t.fontFamily){K.Fonts.drawText(c,t,p=>this.camera.project(p),color,alpha);continue;}
                 const p = this.camera.project(t.position);
