@@ -1,8 +1,8 @@
-__pycache__/
-*.pyc
-.DS_Store
-.venv/
-tests/results/failure-*.png
+# __pycache__/
+# *.pyc
+# .DS_Store
+# .venv/
+# tests/results/failure-*.png
 
-_site/
-.import/
+# _site/
+# .import/
