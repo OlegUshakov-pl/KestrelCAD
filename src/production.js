@@ -207,8 +207,8 @@
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
         const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u); segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25)))]); };
         if (e.kind === 'linear') {
-            const u = V.norm(e.measureAxis || [1, 0, 0]), side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
-            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); direction = u; position = V.add(V.lerp(a, b, .5), V.mul(side, h * .5)); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
+            const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < EPS, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
+            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); direction = u; position = V.add(V.lerp(a, b, .5), V.mul(isVert ? [-1, 0, 0] : side, h * .5)); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
             segments.push([other, q]); arrow(q, other); if (e.kind === 'diameter') arrow(other, q);
@@ -224,7 +224,8 @@
             const a = p[0], b = p[1], axis = e.kind === 'ordinate-y' ? 1 : 0, end = V.add(b, e.kind === 'ordinate-y' ? [e.offset || h * 5, 0, 0] : [0, e.offset || h * 5, 0]);
             segments.push([b, end]); position = end; text = format(b[axis] - a[axis]);
         }
-        return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation: Math.atan2(direction[1], direction[0]), align: 'center' } };
+        const isVertical = Math.abs(direction[0]) < EPS;
+        return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation: Math.atan2(direction[1], direction[0]) + (isVertical ? Math.PI : 0), align: 'center' } };
     }
     function hatchGeometry(e) {
         const loops = e.loops || [e.points], b = basis(e.normal || [0, 0, 1]), origin = loops[0][0];

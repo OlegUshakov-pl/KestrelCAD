@@ -24,7 +24,7 @@
             this.renderer = new K.Renderer($('scene'), $('overlay'), this.camera);
             this.index = new K.SpatialIndex();
             this.settings = { grid: true, snap: false, osnap: true, ortho: false, polar: false, lineweights: false, snapSpacing: 100, polarAngle: 15 };
-            this.defaults = { color: 'bylayer', customColor: '#5ac6d2', lineweight: 0, textHeight: 160, dimensionHeight: 145, precision: 2 };
+            this.defaults = { color: 'bylayer', customColor: '#5ac6d2', lineweight: 0, textHeight: 160, dimensionHeight: 20, precision: 2 };
             this.theme = 'dark';
             this.workspace = '2d';
             this.ribbonTab = 'Home';
@@ -948,7 +948,7 @@
                     this.camera.setView('top');
                     this.renderer.style = 'wireframe';
                     this.defaults.textHeight = 160;
-                    this.defaults.dimensionHeight = 145;
+                    this.defaults.dimensionHeight = 20;
                     this.setRibbon('Home');
                     this.fit(false);
                     this.refresh();
