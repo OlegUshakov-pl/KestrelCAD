@@ -23,3 +23,11 @@ dialog{color:var(--text);background:var(--panel);border:1px solid var(--line);bo
 /* Shared icon sizing protects unclassified icons in property and modal content. */
 svg{width:20px;height:20px;flex-shrink:0}.property-hint .hint-icon svg{width:22px;height:22px}.ribbon-property-control>div>svg{width:20px;height:20px}.ribbon-property-control>div{display:flex;align-items:center;gap:7px;height:27px}.button svg{width:15px;height:15px}.palette-item svg{width:21px;height:21px}
 
+/* Editable dynamic input near the cursor: dimension entry while drawing. */
+#dynamic-input{pointer-events:none;gap:6px;flex-wrap:wrap;max-width:320px}
+#dynamic-input .dyn-field{display:flex;align-items:center;gap:5px;pointer-events:auto}
+#dynamic-input .dyn-field label{font-size:9px;color:var(--muted);letter-spacing:.3px}
+#dynamic-input .dyn-field input{width:72px;height:23px;font:11px Consolas,monospace;padding:2px 6px;color:var(--text)}
+#dynamic-input .dyn-field input:focus{border-color:var(--accent)}
+#dynamic-input .dyn-hint{flex-basis:100%;font-size:9px;color:var(--faint)}
+

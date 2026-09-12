@@ -214,7 +214,7 @@
             viewport.addEventListener('contextmenu', e => e.preventDefault());
             viewport.addEventListener('wheel', e => { if (e.target.closest('select'))
                 return; e.preventDefault(); const p = this.eventPoint(e); this.camera.zoomAt(Math.exp(clamp(-e.deltaY * .0014, -.6, .6)), p[0], p[1]); this.invalidate(); }, { passive: false });
-            viewport.addEventListener('dblclick', e => { if (e.target.closest('button,select'))
+            viewport.addEventListener('dblclick', e => { if (e.target.closest('button,select,input'))
                 return; if (this.tool && ['polyline', 'spline'].includes(this.tool.id)) {
                 this.finishTool();
                 return;
@@ -264,6 +264,28 @@
             $('modal').addEventListener('cancel', () => { this.dialogResolve?.(false); this.dialogResolve = null; });
             $('file-input').onchange = () => { const f = $('file-input').files[0]; if (f)
                 this.openFile(f, this.importMode).catch(x => this.fail(x)); $('file-input').value = ''; };
+            const dyn = $('dynamic-input');
+            dyn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') {
+                e.preventDefault();
+                this.commitDynamic();
+            }
+            else if (e.key === 'Escape') {
+                e.preventDefault();
+                dyn.querySelector('input')?.blur();
+                $('viewport').focus({ preventScroll: true });
+            } });
+            dyn.addEventListener('input', e => { const input = e.target.closest('input[data-dyn]'); if (!input)
+                return; const key = input.dataset.dyn, v = Number(input.value); if (!Number.isFinite(v))
+                return; if (key === 'radius') {
+                const d = dyn.querySelector('input[data-dyn="diameter"]');
+                if (d && document.activeElement !== d)
+                    d.value = Number((v * 2).toFixed(4));
+            }
+            else if (key === 'diameter') {
+                const r = dyn.querySelector('input[data-dyn="radius"]');
+                if (r && document.activeElement !== r)
+                    r.value = Number((v / 2).toFixed(4));
+            } });
             document.addEventListener('dragover', e => { if (e.dataTransfer?.types.includes('Files')) {
                 e.preventDefault();
                 $('drop-zone').hidden = false;
@@ -1403,6 +1425,9 @@
             $('viewport').setPointerCapture(e.pointerId);
         }
         pointerMove(e) {
+            if (e.target.closest('#dynamic-input')) {
+                return;
+            }
             if (e.target.closest('button,select,input,#viewcube') && !this.drag) {
                 this.pointer.inside = false;
                 this.invalidate();
@@ -1907,17 +1932,160 @@
             catch { }
             return [];
         }
-        updateDynamic() { const t = this.tool; if (!t || !this.pointer.inside || (!t.points.length && t.id !== 'paste')) {
-            $('dynamic-input').hidden = true;
+        dynamicBase() { const t = this.tool; if (!t)
+            return this.lastPoint || [0, 0, 0]; return t.points.at(-1) || t.params.origin || this.lastPoint || [0, 0, 0]; }
+        dynamicSpec() {
+            const t = this.tool;
+            if (!t || t.stage === 'selection' || t.stage === 'pick')
+                return null;
+            const n = t.points.length, w = this.pointer.world || [0, 0, 0], fmt = (v, d = 3) => Number(Number(v || 0).toFixed(d)), hint = 'Tab — next field · Enter — apply';
+            const xy = () => ({ fields: [{ key: 'x', label: 'X', value: fmt(w[0]) }, { key: 'y', label: 'Y', value: fmt(w[1]) }], hint });
+            const base = t.points.at(-1) || t.params.origin;
+            const dx = base ? w[0] - base[0] : 0, dy = base ? w[1] - base[1] : 0, dist = Math.hypot(dx, dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
+            switch (t.id) {
+                case 'line':
+                case 'polyline':
+                case 'spline':
+                case 'move':
+                case 'copy':
+                case 'mirror':
+                    if (!n)
+                        return xy();
+                    return { fields: [{ key: 'length', label: 'Length', value: fmt(dist) }, { key: 'angle', label: 'Angle°', value: fmt(ang, 2) }], hint: 'Length + Angle · Enter applies' };
+                case 'circle':
+                case 'polygon':
+                    if (!n)
+                        return xy();
+                    return { fields: [{ key: 'radius', label: 'Radius', value: fmt(dist) }, { key: 'diameter', label: 'Diameter', value: fmt(dist * 2) }], hint: 'Radius or Diameter · Enter applies' };
+                case 'rectangle':
+                    if (!n)
+                        return xy();
+                    return { fields: [{ key: 'width', label: 'Width', value: fmt(Math.abs(dx)) }, { key: 'height', label: 'Height', value: fmt(Math.abs(dy)) }], hint: 'Width + Height · Enter applies' };
+                case 'ellipse':
+                    if (!n)
+                        return xy();
+                    if (n === 1)
+                        return { fields: [{ key: 'length', label: 'Major', value: fmt(dist) }, { key: 'angle', label: 'Angle°', value: fmt(ang, 2) }], hint: 'Major radius + Angle · Enter applies' };
+                    return { fields: [{ key: 'minor', label: 'Minor', value: fmt(Math.abs(V.dot(V.sub(w, t.points[0]), V.norm([- (t.points[1][1] - t.points[0][1]), t.points[1][0] - t.points[0][0], 0])))) }], hint: 'Minor radius · Enter applies' };
+                case 'arc':
+                    return xy();
+                case 'dimension':
+                    if (n < 2)
+                        return xy();
+                    try {
+                        const normal = V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0])));
+                        return { fields: [{ key: 'offset', label: 'Offset', value: fmt(V.dot(V.sub(w, t.points[0]), normal)) }], hint: 'Offset · Enter applies' };
+                    }
+                    catch {
+                        return xy();
+                    }
+                case 'rotate':
+                    if (!n)
+                        return xy();
+                    return { fields: [{ key: 'angle', label: 'Angle°', value: fmt(ang, 2) }], hint: 'Angle · Enter applies' };
+                case 'scale':
+                    if (!n)
+                        return xy();
+                    return { fields: [{ key: 'factor', label: 'Factor', value: fmt(dist / (t.reference || 1)) }], hint: 'Scale factor · Enter applies' };
+                case 'measure':
+                    if (!n)
+                        return xy();
+                    return { fields: [{ key: 'length', label: 'Length', value: fmt(dist) }, { key: 'angle', label: 'Angle°', value: fmt(ang, 2) }], hint: 'Preview only · click second point' };
+                case 'point':
+                case 'text':
+                case 'paste':
+                    return xy();
+                default:
+                    return n || t.params.origin ? null : xy();
+            }
+        }
+        renderDynamic(spec) { const el = $('dynamic-input'), keys = spec.fields.map(f => f.key).join('|'); if (el.dataset.keys !== keys) {
+            el.dataset.keys = keys;
+            el.innerHTML = spec.fields.map(f => `<span class="dyn-field"><label>${esc(f.label)}</label><input data-dyn="${f.key}" type="number" step="any" value="${f.value}" aria-label="${esc(f.label)}"></span>`).join('') + `<span class="dyn-hint">${esc(spec.hint)} · ${esc(this.doc.units)}</span>`;
+        }
+        else if (!el.contains(document.activeElement)) {
+            for (const f of spec.fields) {
+                const input = el.querySelector(`input[data-dyn="${f.key}"]`);
+                if (input)
+                    input.value = f.value;
+            }
+            const hint = el.querySelector('.dyn-hint');
+            if (hint)
+                hint.textContent = `${spec.hint} · ${this.doc.units}`;
+        } }
+        commitDynamic() { const t = this.tool, el = $('dynamic-input'); if (!t || el.hidden)
+            return; const values = {}; for (const input of el.querySelectorAll('input[data-dyn]'))
+            values[input.dataset.dyn] = input.value.trim(); try {
+            const base = this.dynamicBase(), w = this.pointer.world || base;
+            const num = (v, name) => finite(v, name);
+            if ('x' in values || 'y' in values) {
+                if (!('x' in values) || !('y' in values) || values.x === '' || values.y === '')
+                    throw Error('Enter X and Y coordinates.');
+                this.acceptPoint([num(values.x, 'X'), num(values.y, 'Y'), base[2] || 0]);
+            }
+            else if ('radius' in values || 'diameter' in values) {
+                const active = document.activeElement?.dataset?.dyn, r = active === 'diameter' || values.radius === '' && values.diameter !== '' ? num(values.diameter, 'Diameter') / 2 : num(values.radius, 'Radius');
+                positive(r, 'Radius');
+                this.acceptPoint(V.add(base, [r, 0, 0]));
+            }
+            else if ('width' in values) {
+                const W = num(values.width, 'Width'), H = num(values.height, 'Height'), sx = w[0] - base[0] >= 0 ? 1 : -1, sy = w[1] - base[1] >= 0 ? 1 : -1;
+                this.acceptPoint([base[0] + Math.abs(W) * sx, base[1] + Math.abs(H) * sy, base[2] || 0]);
+            }
+            else if ('minor' in values) {
+                const r = positive(values.minor, 'Minor radius'), x = V.sub(t.points[1], t.points[0]), n = V.norm([-x[1], x[0], 0]);
+                this.acceptPoint(V.add(t.points[0], V.mul(n, r)));
+            }
+            else if ('offset' in values) {
+                this.acceptNumber(num(values.offset, 'Offset'));
+            }
+            else if ('factor' in values) {
+                this.acceptNumber(positive(values.factor, 'Scale factor'));
+            }
+            else if (t.id === 'rotate' && 'angle' in values) {
+                this.acceptNumber(num(values.angle, 'Angle'));
+            }
+            else if ('length' in values || 'angle' in values) {
+                if (t.id === 'measure')
+                    throw Error('Measure is preview only — click the second point.');
+                const L = 'length' in values && values.length !== '' ? positive(values.length, 'Length') : V.dist(base, w);
+                let theta = Math.atan2(w[1] - base[1], w[0] - base[0]);
+                if ('angle' in values && values.angle !== '')
+                    theta = num(values.angle, 'Angle') * Math.PI / 180;
+                if (this.settings.ortho && (values.angle === '' || !('angle' in values)))
+                    theta = Math.round(theta / (Math.PI / 2)) * Math.PI / 2;
+                this.acceptPoint([base[0] + L * Math.cos(theta), base[1] + L * Math.sin(theta), base[2] || 0]);
+            }
+            else if ('angle' in values) {
+                this.acceptNumber(num(values.angle, 'Angle'));
+            }
+            else
+                return;
+            const spec = this.dynamicSpec();
+            if (spec && !el.hidden) {
+                this.renderDynamic({ fields: spec.fields, hint: spec.hint });
+                const first = el.querySelector('input');
+                if (first) {
+                    first.focus();
+                    first.select();
+                }
+            }
+            else {
+                $('viewport').focus({ preventScroll: true });
+            }
+        }
+        catch (error) {
+            this.fail(error);
+        } }
+        updateDynamic() { const t = this.tool, el = $('dynamic-input'); if (!t || !this.pointer.inside || t.stage === 'selection' || t.stage === 'pick') {
+            el.hidden = true;
+            el.dataset.keys = '';
             return;
-        } const base = t.points.at(-1) || t.params.origin, d = V.dist(base, this.pointer.world); let label = 'Distance', value = d.toFixed(3) + ' ' + this.doc.units; if (t.id === 'rotate') {
-            label = 'Angle';
-            value = (Math.atan2(this.pointer.world[1] - base[1], this.pointer.world[0] - base[0]) * 180 / Math.PI).toFixed(2) + '°';
-        } if (t.id === 'scale') {
-            label = 'Scale';
-            value = (d / (t.reference || 1)).toFixed(3) + ' ×';
-        } if (t.id === 'circle' || t.id === 'polygon')
-            label = 'Radius'; $('dynamic-label').textContent = label; $('dynamic-value').textContent = value; $('dynamic-input').style.left = clamp(this.pointer.x + 19, 10, this.renderer.width - 165) + 'px'; $('dynamic-input').style.top = clamp(this.pointer.y + 19, 35, this.renderer.height - 80) + 'px'; $('dynamic-input').hidden = false; }
+        } const spec = this.dynamicSpec(); if (!spec) {
+            el.hidden = true;
+            el.dataset.keys = '';
+            return;
+        } this.renderDynamic(spec); el.style.left = clamp(this.pointer.x + 19, 10, Math.max(10, this.renderer.width - 340)) + 'px'; el.style.top = clamp(this.pointer.y + 19, 35, Math.max(35, this.renderer.height - 90)) + 'px'; el.hidden = false; }
         drawOverlay(c) {
             const cam = this.camera, theme = this.sheet ? 'light' : this.theme, project = p => cam.project(p);
             c.save();
