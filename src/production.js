@@ -208,7 +208,8 @@
         const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u); segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25)))]); };
         if (e.kind === 'linear') {
             const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < EPS, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
-            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); direction = u; position = V.add(V.lerp(a, b, .5), V.mul(isVert ? [-1, 0, 0] : side, h * .5)); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
+            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); direction = u; text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
+            const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(isVert ? [-1, 0, 0] : side, isVert ? h * (.7 + .3 * label.length) : h * .5));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
             segments.push([other, q]); arrow(q, other); if (e.kind === 'diameter') arrow(other, q);
