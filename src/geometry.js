@@ -77,7 +77,7 @@
         segments.push([p, V.add(p, V.add(V.mul(u, dir * s), V.mul(n, s * .28)))]);
         segments.push([p, V.add(p, V.add(V.mul(u, dir * s), V.mul(n, -s * .28)))]);
     } const isVertical = Math.abs(u[0]) < EPS;
-    return { segments, text: { position: V.add(mid, V.mul(isVertical ? [1, 0, 0] : n, s * .5)), text: e.text || len.toFixed(e.precision ?? 0), height: s, rotation: Math.atan2(u[1], u[0]), direction: u, normal: e.normal || [0, 0, 1], align: 'center' } }; }
+    return { segments, text: { position: V.add(mid, V.mul(isVertical ? [-1, 0, 0] : n, s * .5)), text: e.text || len.toFixed(e.precision ?? 0), height: s, rotation: Math.atan2(u[1], u[0]) + (isVertical ? Math.PI : 0), direction: u, normal: e.normal || [0, 0, 1], align: 'center' } }; }
     function featureEdges(vertices, used, all = false) {
         if (all)
             return [...used.values()].map(e => [vertices[e.a], vertices[e.b]]);
