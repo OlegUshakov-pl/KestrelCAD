@@ -590,7 +590,7 @@
                 else if (one.type === 'DIMENSION') {
                     html += read('Measurement', V.dist(...one.points).toFixed(3) + ' ' + doc.units);
                     html += input('Offset', 'offset', one.offset || 0);
-                    html += input('Text height', 'textHeight', one.textHeight || 10, 'number', 'min="0.0001"');
+                    html += input('Text height', 'textHeight', one.textHeight || 20, 'number', 'min="0.0001"');
                     html += input('Text override', 'text', one.text || '', 'text');
                     html += input('Precision', 'precision', one.precision ?? this.defaults.precision, 'number', 'min="0" max="6" step="1"');
                 }

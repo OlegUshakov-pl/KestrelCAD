@@ -21,7 +21,7 @@
     const empty = () => ({ segments: [], wireSegments: [], triangles: [], texts: [], snaps: [], points: [] });
     const merge = (out, g) => { for (const key of Object.keys(out)) for (const v of g[key] || []) out[key].push(v); return out; };
     function defaults() {
-        return { schema: 2, blocks: [], references: [], dimstyles: [{ name: 'STANDARD', textHeight: 2.5, precision: 2, scale: 1, prefix: '', suffix: '' }],
+        return { schema: 2, blocks: [], references: [], dimstyles: [{ name: 'STANDARD', textHeight: 20, precision: 2, scale: 1, prefix: '', suffix: '' }],
             layouts: [], ucs: { origin: [0, 0, 0], x: [1, 0, 0], y: [0, 1, 0] } };
     }
     function ensure(doc) {
