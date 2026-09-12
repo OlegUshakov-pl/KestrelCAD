@@ -1936,7 +1936,7 @@
             return this.lastPoint || [0, 0, 0]; return t.points.at(-1) || t.params.origin || this.lastPoint || [0, 0, 0]; }
         dynamicSpec() {
             const t = this.tool;
-            if (!t || t.stage === 'selection' || t.stage === 'pick')
+            if (!t || t.stage === 'selection' || (t.stage === 'pick' && t.id !== 'offset'))
                 return null;
             const n = t.points.length, w = this.pointer.world || [0, 0, 0], fmt = (v, d = 3) => Number(Number(v || 0).toFixed(d)), hint = 'Tab — next field · Enter — apply';
             const xy = () => ({ fields: [{ key: 'x', label: 'X', value: fmt(w[0]) }, { key: 'y', label: 'Y', value: fmt(w[1]) }], hint });
@@ -1979,6 +1979,10 @@
                     catch {
                         return xy();
                     }
+                case 'offset':
+                    if (!t.source)
+                        return null;
+                    return { fields: [{ key: 'offset', label: 'Offset', value: fmt(t.params.distance) }], hint: 'Offset · Enter applies' };
                 case 'rotate':
                     if (!n)
                         return xy();
@@ -2037,7 +2041,8 @@
                 this.acceptPoint(V.add(t.points[0], V.mul(n, r)));
             }
             else if ('offset' in values) {
-                this.acceptNumber(num(values.offset, 'Offset'));
+                t.params.distance = positive(values.offset, 'Offset');
+                this.updateToolPrompt();
             }
             else if ('factor' in values) {
                 this.acceptNumber(positive(values.factor, 'Scale factor'));
@@ -2077,7 +2082,7 @@
         catch (error) {
             this.fail(error);
         } }
-        updateDynamic() { const t = this.tool, el = $('dynamic-input'); if (!t || !this.pointer.inside || t.stage === 'selection' || t.stage === 'pick') {
+        updateDynamic() { const t = this.tool, el = $('dynamic-input'); if (!t || !this.pointer.inside || t.stage === 'selection' || (t.stage === 'pick' && t.id !== 'offset')) {
             el.hidden = true;
             el.dataset.keys = '';
             return;
@@ -2377,6 +2382,17 @@
                 this.pasteClipboard();
             }
             return;
+        } if (event.key === 'Tab' && this.tool && !typing && $('command-suggestions').hidden) {
+            const el = $('dynamic-input');
+            if (el && !el.hidden) {
+                event.preventDefault();
+                const first = el.querySelector('input');
+                if (first) {
+                    first.focus();
+                    first.select();
+                }
+                return;
+            }
         } if (typing)
             return; const functions = { F1: 'help', F2: 'command-history', F3: 'osnap', F7: 'grid', F8: 'ortho', F9: 'snap', F10: 'polar' }; if (functions[event.key]) {
             invoke(functions[event.key]);
