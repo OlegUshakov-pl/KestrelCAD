@@ -76,8 +76,10 @@
     function dimension(e) { const a = e.points[0], b = e.points[1], d = V.sub(b, a), len = V.len(d), u = V.norm(d), n = V.norm(V.cross(e.normal || [0, 0, 1], u)), off = e.offset ?? len * .12, s = e.textHeight || Math.max(1, len * .025), aa = V.add(a, V.mul(n, off)), bb = V.add(b, V.mul(n, off)), mid = V.lerp(aa, bb, .5); const segments = [[V.add(a, V.mul(n, Math.sign(off) * s * .3)), V.add(aa, V.mul(n, Math.sign(off) * s * .8))], [V.add(b, V.mul(n, Math.sign(off) * s * .3)), V.add(bb, V.mul(n, Math.sign(off) * s * .8))], [aa, bb]]; for (const [p, dir] of [[aa, 1], [bb, -1]]) {
         segments.push([p, V.add(p, V.add(V.mul(u, dir * s), V.mul(n, s * .28)))]);
         segments.push([p, V.add(p, V.add(V.mul(u, dir * s), V.mul(n, -s * .28)))]);
-    } const isVertical = Math.abs(u[0]) < EPS, label = e.text || len.toFixed(e.precision ?? 0), gap = isVertical ? s * (.7 + .3 * label.length) : s * .5;
-    return { segments, text: { position: V.add(mid, V.mul(isVertical ? [-1, 0, 0] : n, gap)), text: label, height: s, rotation: Math.atan2(u[1], u[0]) + (isVertical ? Math.PI : 0), direction: u, normal: e.normal || [0, 0, 1], align: 'center' } }; }
+    } const isVertical = Math.abs(u[0]) < EPS, label = e.text || len.toFixed(e.precision ?? 0), gap = isVertical ? s * (.5 + .25 * label.length) : s * .5;
+    let rotation = Math.atan2(u[1], u[0]) + (isVertical ? Math.PI : 0);
+    if (isVertical && Math.sin(rotation) < 0) rotation += Math.PI;
+    return { segments, text: { position: V.add(mid, V.mul(isVertical ? [-1, 0, 0] : n, gap)), text: label, height: s, rotation, direction: u, normal: e.normal || [0, 0, 1], align: 'center' } }; }
     function featureEdges(vertices, used, all = false) {
         if (all)
             return [...used.values()].map(e => [vertices[e.a], vertices[e.b]]);

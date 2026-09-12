@@ -209,7 +209,7 @@
         if (e.kind === 'linear') {
             const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < EPS, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
             segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); direction = u; text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
-            const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(isVert ? [-1, 0, 0] : side, isVert ? h * (.7 + .3 * label.length) : h * .5));
+            const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(isVert ? [-1, 0, 0] : side, isVert ? h * (.5 + .25 * label.length) : h * .5));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
             segments.push([other, q]); arrow(q, other); if (e.kind === 'diameter') arrow(other, q);
@@ -226,7 +226,9 @@
             segments.push([b, end]); position = end; text = format(b[axis] - a[axis]);
         }
         const isVertical = Math.abs(direction[0]) < EPS;
-        return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation: Math.atan2(direction[1], direction[0]) + (isVertical ? Math.PI : 0), align: 'center' } };
+        let rotation = Math.atan2(direction[1], direction[0]) + (isVertical ? Math.PI : 0);
+        if (isVertical && Math.sin(rotation) < 0) rotation += Math.PI;
+        return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
         const loops = e.loops || [e.points], b = basis(e.normal || [0, 0, 1]), origin = loops[0][0];
