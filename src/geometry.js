@@ -78,11 +78,11 @@
         segments.push([p, w1]); segments.push([p, w2]);
         triangles.push({ points: [p, w1, w2], normal: e.normal || [0, 0, 1] });
     } const isVertical = Math.abs(u[0]) < .3, label = e.text || len.toFixed(e.precision ?? 0), gap = isVertical ? s * (.24 + .12 * label.length) : s * .24;
-    let rotation = Math.atan2(u[1], u[0]) + (isVertical ? Math.PI : 0);
-    if (isVertical && Math.sin(rotation) < 0) rotation += Math.PI;
-    if (isVertical) rotation = Math.PI / 2;
-    const dir = isVertical ? [0, 1, 0] : u;
-    return { segments, triangles, text: { position: V.add(mid, V.mul(isVertical ? [-1, 0, 0] : n, gap)), text: label, height: s, rotation, direction: dir, normal: e.normal || [0, 0, 1], align: 'center' } }; }
+    const nn = e.normal || [0, 0, 1];
+    let dir, side, rotation;
+    if (isVertical) { dir = [0, 1, 0]; side = [-1, 0, 0]; rotation = Math.PI / 2; }
+    else { dir = u[0] < 0 ? V.mul(u, -1) : u; side = V.norm(V.cross(nn, dir)); rotation = Math.atan2(dir[1], dir[0]); }
+    return { segments, triangles, text: { position: V.add(mid, V.mul(side, gap)), text: label, height: s, rotation, direction: dir, normal: nn, align: 'center' } }; }
     function featureEdges(vertices, used, all = false) {
         if (all)
             return [...used.values()].map(e => [vertices[e.a], vertices[e.b]]);

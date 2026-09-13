@@ -208,12 +208,18 @@
         const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u); segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25)))]); };
         if (e.kind === 'linear') {
             const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < .3, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
-            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); direction = isVert ? [0, 1, 0] : u; text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
-            const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(isVert ? [-1, 0, 0] : side, isVert ? h * (.24 + .12 * label.length) : h * .24));
+            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
+            const rd = isVert ? [0, 1, 0] : (u[0] < 0 ? V.mul(u, -1) : u);
+            direction = rd;
+            const rside = isVert ? [-1, 0, 0] : V.norm(V.cross(n, rd));
+            const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(rside, isVert ? h * (.24 + .12 * label.length) : h * .24));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
             segments.push([other, q]); arrow(q, other); if (e.kind === 'diameter') arrow(other, q);
-            direction = V.norm(V.sub(q, c)); position = V.add(q, V.mul(direction, h * 1.4)); text = (e.kind === 'radius' ? 'R' : '⌀') + format(V.dist(c, q) * (e.kind === 'diameter' ? 2 : 1));
+            direction = V.norm(V.sub(q, c));
+            if (Math.abs(direction[0]) >= .3 && direction[0] < 0) direction = V.mul(direction, -1);
+            if (Math.abs(direction[0]) < .3) direction = [0, 1, 0];
+            position = V.add(q, V.mul(direction, h * 1.4)); text = (e.kind === 'radius' ? 'R' : '⌀') + format(V.dist(c, q) * (e.kind === 'diameter' ? 2 : 1));
         } else if (e.kind === 'angular') {
             if (p.length !== 3) throw Error('Angular dimensions require a vertex and two ray points.');
             const u = V.norm(V.sub(p[1], p[0])), w = V.norm(V.sub(p[2], p[0])), side = V.cross(n, u), a = angle(Math.atan2(V.dot(w, side), V.dot(w, u))), radius = Math.abs(e.offset || Math.min(V.dist(p[0], p[1]), V.dist(p[0], p[2])) * .6);
@@ -226,9 +232,9 @@
             segments.push([b, end]); position = end; text = format(b[axis] - a[axis]);
         }
         const isVertical = Math.abs(direction[0]) < .3;
-        let rotation = Math.atan2(direction[1], direction[0]) + (isVertical ? Math.PI : 0);
-        if (isVertical && Math.sin(rotation) < 0) rotation += Math.PI;
+        let rotation;
         if (isVertical) { rotation = Math.PI / 2; direction = [0, 1, 0]; }
+        else { if (direction[0] < 0) direction = V.mul(direction, -1); rotation = Math.atan2(direction[1], direction[0]); }
         return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
