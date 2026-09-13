@@ -1,6 +1,10 @@
 # Kestrel CAD
 
-**[Live editor (main)](https://wieslawsoltes.github.io/KestrelCAD/)** · [Production v2 review](docs/V2-REVIEW.md)
+![KestrelCad](image.png)
+
+[Production v2 review](docs/V2-REVIEW.md)
+
+## **A Fork from wieslawsoltes/KestrelCAD**
 
 Local-first 2D drafting and 3D modeling in plain HTML, CSS and JavaScript. A custom WebGPU renderer, Canvas compatibility renderer, CAD ribbon, command line, layers, selection, grips and atomic undo/redo. No JavaScript framework, CDN, account or remote drawing service is required.
 
