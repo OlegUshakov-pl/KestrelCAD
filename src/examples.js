@@ -9,7 +9,7 @@
         const rect = (x, y, w, h, layer = 'architecture') => add('POLYLINE', { points: [[x, y, 0], [x + w, y, 0], [x + w, y + h, 0], [x, y + h, 0]], closed: true }, layer);
         const circle = (x, y, r, layer = 'furniture') => add('CIRCLE', { center: [x, y, 0], radius: r }, layer);
         const text = (x, y, t, h = 165, layer = 'annotation', align = 'left') => add('TEXT', { position: [x, y, 0], text: t, height: h, align }, layer);
-        const dim = (a, b, offset, h = 20) => add('DIMENSION', { points: [[...a, 0], [...b, 0]], offset, textHeight: h }, 'dimensions');
+        const dim = (a, b, offset, h = 10) => add('DIMENSION', { points: [[...a, 0], [...b, 0]], offset, textHeight: h }, 'dimensions');
         function wall(x, y, w, h) { rect(x, y, w, h); add('HATCH', { points: [[x, y, 0], [x + w, y, 0], [x + w, y + h, 0], [x, y + h, 0]], spacing: 110, angle: Math.PI / 4, pattern: 'ANSI31' }, 'hatch'); }
         function win(x1, y1, x2, y2) { const a = [x1, y1], b = [x2, y2]; if (y1 === y2) {
             for (const t of [35, 90, 145])

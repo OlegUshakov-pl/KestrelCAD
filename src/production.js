@@ -21,7 +21,7 @@
     const empty = () => ({ segments: [], wireSegments: [], triangles: [], texts: [], snaps: [], points: [] });
     const merge = (out, g) => { for (const key of Object.keys(out)) for (const v of g[key] || []) out[key].push(v); return out; };
     function defaults() {
-        return { schema: 2, blocks: [], references: [], dimstyles: [{ name: 'STANDARD', textHeight: 20, precision: 2, scale: 1, prefix: '', suffix: '' }],
+        return { schema: 2, blocks: [], references: [], dimstyles: [{ name: 'STANDARD', textHeight: 10, precision: 2, scale: 1, prefix: '', suffix: '' }],
             layouts: [], ucs: { origin: [0, 0, 0], x: [1, 0, 0], y: [0, 1, 0] } };
     }
     function ensure(doc) {
@@ -202,7 +202,7 @@
     function dimension(e) {
         const doc = owners.get(e), style = doc?.production?.dimstyles.find(s => s.name === e.dimstyle), v = { ...style, ...e };
         if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = style.prefix + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + style.suffix; return result; }
-        const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 20, segments = [];
+        const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [];
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
         const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u); segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25)))]); };
@@ -227,7 +227,8 @@
         }
         const isVertical = Math.abs(direction[0]) < EPS;
         let rotation = Math.atan2(direction[1], direction[0]) + (isVertical ? Math.PI : 0);
-        if (isVertical && Math.sin(rotation) < 0) rotation += Math.PI;
+        if (isVertical && Math.sin(rotation) > 0) rotation += Math.PI;
+        if (isVertical) direction = [Math.cos(rotation), Math.sin(rotation), 0];
         return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
