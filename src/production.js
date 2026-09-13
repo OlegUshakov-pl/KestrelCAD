@@ -202,10 +202,10 @@
     function dimension(e) {
         const doc = owners.get(e), style = doc?.production?.dimstyles.find(s => s.name === e.dimstyle), v = { ...style, ...e };
         if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = style.prefix + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + style.suffix; return result; }
-        const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [];
+        const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [];
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
-        const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u); segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25)))]); };
+        const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u), w1 = V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25))), w2 = V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25))); segments.push([a, w1], [a, w2]); triangles.push({ points: [a, w1, w2], normal: e.normal || [0, 0, 1] }); };
         if (e.kind === 'linear') {
             const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < .3, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
             segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
@@ -235,7 +235,7 @@
         let rotation;
         if (isVertical) { rotation = Math.PI / 2; direction = [0, 1, 0]; }
         else { if (direction[0] < 0) direction = V.mul(direction, -1); rotation = Math.atan2(direction[1], direction[0]); }
-        return { segments, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
+        return { segments, triangles, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
         const loops = e.loops || [e.points], b = basis(e.normal || [0, 0, 1]), origin = loops[0][0];
@@ -282,7 +282,7 @@
         if (e.type === 'TABLE') return tableGeometry(e);
         if (e.type === 'LEADER') { const out = empty(); for (let i = 1; i < e.points.length; i++) out.segments.push([e.points[i - 1], e.points[i]]); const a = e.points[0], u = V.norm(V.sub(e.points[1], a)), side = V.cross(e.normal || [0, 0, 1], u), h = e.textHeight || 2.5; out.segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h / 4)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h / 4)))]); out.texts.push({ position: e.points.at(-1), text: e.text, height: h, normal: e.normal }); out.points = out.segments.flat(); return out; }
         if (e.type === 'HATCH' && e.loops) return hatchGeometry(e);
-        if (e.type === 'DIMENSION' && (e.kind || e.dimstyle)) { const d = dimension(e), out = empty(); out.segments = d.segments; out.texts = [d.text]; out.points = [...d.segments.flat(), d.text.position]; out.snaps = e.points.map(p => ({ point: p, type: 'endpoint' })); return out; }
+        if (e.type === 'DIMENSION' && (e.kind || e.dimstyle)) { const d = dimension(e), out = empty(); out.segments = d.segments; out.triangles = d.triangles || []; out.texts = [d.text]; out.points = [...d.segments.flat(), d.text.position]; out.snaps = e.points.map(p => ({ point: p, type: 'endpoint' })); return out; }
         return baseGeometry(e, tolerance);
     }
     function transform(e, matrix) {
