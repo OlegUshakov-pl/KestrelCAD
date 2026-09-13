@@ -616,6 +616,9 @@
         for (const { e, g, svgid } of geometries) {
             const layer = doc.layer(e), color = mono ? '#16212b' : K.displayColor ? K.displayColor(e.color && !['bylayer','byblock'].includes(e.color) ? e.color : layer.color, 'light') : e.color && !['bylayer','byblock'].includes(e.color) ? e.color : layer.color, width = Math.max(.6, (e.lineweight || layer.lineweight || .25) * 3);
             svg.push(`<g id="${xml(svgid)}" data-layer="${xml(layer.name)}" stroke="${color}" stroke-width="${width}" fill="none" stroke-linejoin="round" stroke-linecap="round">`);
+            if (e.type === 'DIMENSION')
+                for (const t of g.triangles)
+                    svg.push(`<polygon points="${t.points.map(p => fmt(project(p))).join(' ')}" fill="${color}" stroke="none"/>`);
             if (e.type === 'HATCH' && e.pattern === 'solid' || e.type === 'MESH' && options.shaded)
                 for (const t of g.triangles)
                     svg.push(`<polygon points="${t.points.map(p => fmt(project(p))).join(' ')}" fill="${color}" fill-opacity="0.18" stroke="none"/>`);

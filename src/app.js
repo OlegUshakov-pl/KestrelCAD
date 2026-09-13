@@ -1224,7 +1224,7 @@
             case 'offset': return t.source ? 'Click the side to place the offset' : 'Select an object to offset';
             case 'fillet':
             case 'chamfer': return t.source ? 'Select second line, near the end to retain' : 'Select first line, near the end to retain';
-            case 'trim': return 'Click the line interval to trim';
+            case 'trim': return 'Click the curve interval to trim (line, circle, arc)';
             case 'extend': return 'Click the line near the endpoint to extend';
             case 'hatch': return 'Select a closed boundary to hatch';
             case 'extrude': return 'Select a closed planar profile';
@@ -1764,52 +1764,182 @@
             return M.around(base, M.multiply(M.rotation(a), M.multiply(M.scale(1, -1, 1), M.rotation(-a))));
         } return null; }
         trimExtend(entity, p, extend, cutters = []) {
-            if (entity.type !== 'LINE')
-                throw Error('This command edits LINE entities. Explode a polyline first.');
-            const a = entity.points[0], b = entity.points[1], cuts = [];
-            for (const e of this.doc.entities) {
-                if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id))
-                    continue;
-                for (const s of this.doc.geometry(e).segments) {
-                    if (Math.abs(s[0][2] - a[2]) > 1e-5 || Math.abs(s[1][2] - a[2]) > 1e-5)
-                        continue;
-                    const hit = lineIntersection(a, b, ...s);
-                    if (hit && hit.u >= -EPS && hit.u <= 1 + EPS)
-                        cuts.push(hit.t);
-                }
-            }
+            const circleLineIntersections = (center, radius, a, b) => {
+                const d = V.sub(b, a), f = V.sub(a, center), aCoeff = V.dot(d, d);
+                if (aCoeff < 1e-12) return [];
+                const bCoeff = 2 * V.dot(f, d), cCoeff = V.dot(f, f) - radius * radius;
+                const disc = bCoeff * bCoeff - 4 * aCoeff * cCoeff;
+                if (disc < -1e-9) return [];
+                const s = Math.sqrt(Math.max(0, disc)), t1 = (-bCoeff - s) / (2 * aCoeff), t2 = (-bCoeff + s) / (2 * aCoeff);
+                const out = [];
+                if (t1 >= -1e-9 && t1 <= 1 + 1e-9) out.push(V.lerp(a, b, Math.max(0, Math.min(1, t1))));
+                if (disc > 1e-9 && t2 >= -1e-9 && t2 <= 1 + 1e-9) out.push(V.lerp(a, b, Math.max(0, Math.min(1, t2))));
+                return out;
+            };
+            const circleCircleIntersections = (c1, r1, c2, r2) => {
+                const dx = c2[0] - c1[0], dy = c2[1] - c1[1], d = Math.hypot(dx, dy);
+                if (d < 1e-9 || d > r1 + r2 + 1e-9 || d < Math.abs(r1 - r2) - 1e-9) return [];
+                const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d), h2 = r1 * r1 - a * a;
+                if (h2 < -1e-9) return [];
+                const h = Math.sqrt(Math.max(0, h2)), xm = c1[0] + a * dx / d, ym = c1[1] + a * dy / d, rx = -dy * h / d, ry = dx * h / d;
+                const p1 = [xm + rx, ym + ry, c1[2] || 0], p2 = [xm - rx, ym - ry, c1[2] || 0];
+                return h < 1e-9 ? [p1] : [p1, p2];
+            };
             if (extend) {
+                if (entity.type !== 'LINE') throw Error('Extend supports LINE entities only.');
+                const a = entity.points[0], b = entity.points[1], cuts = [];
+                for (const e of this.doc.entities) {
+                    if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id)) continue;
+                    for (const s of this.doc.geometry(e).segments) {
+                        if (Math.abs(s[0][2] - a[2]) > 1e-5 || Math.abs(s[1][2] - a[2]) > 1e-5) continue;
+                        const hit = lineIntersection(a, b, ...s);
+                        if (hit && hit.u >= -EPS && hit.u <= 1 + EPS) cuts.push(hit.t);
+                    }
+                }
                 const first = V.dist(p, a) < V.dist(p, b), candidates = cuts.filter(t => first ? t < -EPS : t > 1 + EPS);
-                if (!candidates.length)
-                    throw Error('No boundary beyond that endpoint.');
+                if (!candidates.length) throw Error('No boundary beyond that endpoint.');
                 const t = first ? Math.max(...candidates) : Math.min(...candidates), point = V.lerp(a, b, t);
                 this.doc.transaction('Extend line', () => this.doc.replace(entity.id, { ...entity, points: first ? [point, b] : [a, point] }));
+                return;
             }
-            else {
+            if (entity.type === 'LINE') {
+                const a = entity.points[0], b = entity.points[1], cuts = [];
+                for (const e of this.doc.entities) {
+                    if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id)) continue;
+                    for (const s of this.doc.geometry(e).segments) {
+                        if (Math.abs(s[0][2] - a[2]) > 1e-5 || Math.abs(s[1][2] - a[2]) > 1e-5) continue;
+                        const hit = lineIntersection(a, b, ...s);
+                        if (hit && hit.u >= -EPS && hit.u <= 1 + EPS) cuts.push(hit.t);
+                    }
+                }
                 const insideCuts = [...new Set(cuts.filter(t => t > EPS && t < 1 - EPS).map(t => Number(t.toFixed(10))))].sort((a, b) => a - b);
-                if (!insideCuts.length)
-                    throw Error('No cutting intersections on this line.');
+                if (!insideCuts.length) throw Error('No cutting intersections on this line.');
                 const t = segmentDistance(p, a, b).t, values = [0, ...insideCuts, 1];
                 let low = 0, high = 1;
-                for (let i = 0; i < values.length - 1; i++)
-                    if (t >= values[i] - EPS && t <= values[i + 1] + EPS) {
-                        low = values[i];
-                        high = values[i + 1];
-                        break;
-                    }
+                for (let i = 0; i < values.length - 1; i++) if (t >= values[i] - EPS && t <= values[i + 1] + EPS) { low = values[i]; high = values[i + 1]; break; }
                 const pieces = [];
-                if (low > EPS)
-                    pieces.push([a, V.lerp(a, b, low)]);
-                if (high < 1 - EPS)
-                    pieces.push([V.lerp(a, b, high), b]);
-                this.doc.transaction('Trim line', () => { this.doc.remove([entity.id]); for (const points of pieces) {
-                    const e = { ...entity, points };
-                    delete e.id;
-                    this.doc.add(e);
-                } });
+                if (low > EPS) pieces.push([a, V.lerp(a, b, low)]);
+                if (high < 1 - EPS) pieces.push([V.lerp(a, b, high), b]);
+                this.doc.transaction('Trim line', () => { this.doc.remove([entity.id]); for (const points of pieces) { const e = { ...entity, points }; delete e.id; this.doc.add(e); } });
+                return;
             }
-        }
-        entityGrips(e) {
+            if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
+                const isCircle = entity.type === 'CIRCLE';
+                const axes = G.conicAxes(entity), radius = V.len(axes.x);
+                if (radius < EPS) throw Error('Invalid circle radius.');
+                const center = entity.center, start = entity.startAngle || 0, sweepOrig = isCircle ? TAU : sweep(start, entity.endAngle);
+                if (!isCircle && sweepOrig < EPS) throw Error('Invalid arc sweep.');
+                const ax = V.norm(axes.x), ay = V.norm(axes.y);
+                const angleOf = pt => angle(Math.atan2(V.dot(V.sub(pt, center), ay), V.dot(V.sub(pt, center), ax)));
+                const tOfAngle = ang => {
+                    const delta = angle(ang - angle(start));
+                    if (isCircle) return delta / TAU;
+                    if (delta > sweepOrig + 1e-7) return null;
+                    return delta / sweepOrig;
+                };
+                const cuts = [], z0 = center[2] || 0;
+                for (const e of this.doc.entities) {
+                    if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id)) continue;
+                    if (e.type === 'CIRCLE' || e.type === 'ARC') {
+                        const axes2 = G.conicAxes(e), r2 = V.len(axes2.x), c2 = e.center;
+                        if (Math.abs((c2[2] || 0) - z0) > 1e-5) continue;
+                        const pts = circleCircleIntersections(center, radius, c2, r2);
+                        for (const pt of pts) {
+                            const ang = angleOf(pt);
+                            const t = tOfAngle(ang);
+                            if (t == null || t < -1e-9 || t > 1 + 1e-9) continue;
+                            if (e.type === 'ARC') {
+                                const ax2 = V.norm(axes2.x), ay2 = V.norm(axes2.y);
+                                const ang2 = angle(Math.atan2(V.dot(V.sub(pt, c2), ay2), V.dot(V.sub(pt, c2), ax2)));
+                                const delta2 = angle(ang2 - angle(e.startAngle || 0)), sw2 = sweep(e.startAngle || 0, e.endAngle);
+                                if (delta2 > sw2 + 1e-7) continue;
+                            }
+                            cuts.push(t);
+                        }
+                    } else {
+                        for (const s of this.doc.geometry(e).segments) {
+                            if (Math.abs(s[0][2] - z0) > 1e-5 || Math.abs(s[1][2] - z0) > 1e-5) continue;
+                            const pts = circleLineIntersections(center, radius, s[0], s[1]);
+                            for (const pt of pts) {
+                                const ang = angleOf(pt);
+                                const t = tOfAngle(ang);
+                                if (t == null) continue;
+                                cuts.push(t);
+                            }
+                        }
+                    }
+                }
+                const uniqAll = [...new Set(cuts.map(t => Number(((t % 1 + 1) % 1).toFixed(10))))].sort((a, b) => a - b);
+                let sorted = uniqAll.filter(t => t > 1e-9 && t < 1 - 1e-9);
+                if (isCircle) sorted = uniqAll.slice().sort((a, b) => a - b);
+                if (isCircle && !sorted.length) sorted = [...new Set(cuts.map(t => Number(((t % 1 + 1) % 1).toFixed(10))))].sort((a,b)=>a-b);
+                if (!sorted.length) throw Error('No cutting intersections on this curve.');
+                // deduplicate circle case keep all
+                sorted = [...new Set(sorted.map(t => Number(t.toFixed(10))))].sort((a,b)=>a-b);
+                if (isCircle && sorted.length < 2) throw Error('No cutting intersections on this curve.');
+                const vClick = V.sub(p, center);
+                let angClick = angle(Math.atan2(V.dot(vClick, ay), V.dot(vClick, ax)));
+                let tClick = tOfAngle(angClick);
+                if (tClick == null) {
+                    // for ARC clicked outside, snap to nearest
+                    const ds = Math.abs(angle(angClick - angle(start))), de = Math.abs(angle(angClick - angle(entity.endAngle)));
+                    tClick = ds < de ? 0 : 1;
+                }
+                if (isCircle) {
+                    const n = sorted.length;
+                    let removeIdx = -1;
+                    for (let i = 0; i < n; i++) {
+                        const low = sorted[i], high = i + 1 < n ? sorted[i + 1] : sorted[0] + 1;
+                        let insideInt = false;
+                        if (high <= 1) insideInt = tClick >= low - 1e-9 && tClick <= high + 1e-9;
+                        else insideInt = tClick >= low - 1e-9 || tClick <= (high - 1) + 1e-9;
+                        if (insideInt) { removeIdx = i; break; }
+                    }
+                    if (removeIdx < 0) throw Error('Click position is outside the curve.');
+                    const pieces = [];
+                    for (let i = 0; i < n; i++) {
+                        if (i === removeIdx) continue;
+                        const low = sorted[i], high = i + 1 < n ? sorted[i + 1] : sorted[0] + 1;
+                        const sAng = angle(start) + low * TAU, eAng = angle(start) + high * TAU;
+                        pieces.push({ sAng, eAng });
+                    }
+                    if (!pieces.length) { this.doc.transaction('Trim circle', () => this.doc.remove([entity.id])); return; }
+                    this.doc.transaction('Trim circle', () => {
+                        this.doc.remove([entity.id]);
+                        for (const pc of pieces) {
+                            const out = { type: 'ARC', center: center.slice(), radius, startAngle: pc.sAng, endAngle: pc.eAng, layer: entity.layer, color: entity.color, normal: entity.normal ? entity.normal.slice() : [0, 0, 1] };
+                            if (entity.lineweight) out.lineweight = entity.lineweight;
+                            if (entity.linetype) out.linetype = entity.linetype;
+                            out.axisX = V.mul(ax, radius); out.axisY = V.mul(ay, radius);
+                            this.doc.add(out);
+                        }
+                    });
+                    return;
+                } else {
+                    // ARC
+                    const values = [0, ...sorted.filter(t=> t>1e-9 && t <1-1e-9), 1];
+                    let low = 0, high = 1;
+                    for (let i = 0; i < values.length - 1; i++) if (tClick >= values[i] - 1e-9 && tClick <= values[i + 1] + 1e-9) { low = values[i]; high = values[i + 1]; break; }
+                    const pieces = [];
+                    if (low > 1e-9) pieces.push({ low: 0, high: low });
+                    if (high < 1 - 1e-9) pieces.push({ low: high, high: 1 });
+                    if (!pieces.length) { this.doc.transaction('Trim arc', () => this.doc.remove([entity.id])); return; }
+                    this.doc.transaction('Trim arc', () => {
+                        this.doc.remove([entity.id]);
+                        for (const pc of pieces) {
+                            const sAng = start + pc.low * sweepOrig, eAng = start + pc.high * sweepOrig;
+                            const out = { type: 'ARC', center: center.slice(), radius, startAngle: sAng, endAngle: eAng, layer: entity.layer, color: entity.color, normal: entity.normal ? entity.normal.slice() : [0, 0, 1] };
+                            if (entity.lineweight) out.lineweight = entity.lineweight;
+                            if (entity.linetype) out.linetype = entity.linetype;
+                            out.axisX = V.mul(ax, radius); out.axisY = V.mul(ay, radius);
+                            this.doc.add(out);
+                        }
+                    });
+                    return;
+                }
+            }
+            throw Error('This command edits LINE, CIRCLE and ARC entities. Explode a polyline first.');
+        }        entityGrips(e) {
             const result = [];
             if (e.points && ['LINE', 'POLYLINE', 'HATCH', 'DIMENSION'].includes(e.type)) {
                 e.points.forEach((p, i) => result.push({ kind: 'point', index: i, point: p }));
