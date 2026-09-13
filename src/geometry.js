@@ -80,8 +80,8 @@
     } const isVertical = Math.abs(u[0]) < EPS, label = e.text || len.toFixed(e.precision ?? 0), gap = isVertical ? s * (.24 + .12 * label.length) : s * .24;
     let rotation = Math.atan2(u[1], u[0]) + (isVertical ? Math.PI : 0);
     if (isVertical && Math.sin(rotation) < 0) rotation += Math.PI;
-    const dir = isVertical ? [Math.cos(rotation), Math.sin(rotation), 0] : u;
-    return { segments, triangles, text: { position: V.add(mid, V.mul(isVertical ? [-1, 0, 0] : n, gap)), text: label, height: s, rotation, direction: dir, normal: e.normal || [0, 0, 1], align: 'center' } }; }
+    const dir = isVertical ? [Math.cos(rotation + Math.PI), Math.sin(rotation + Math.PI), 0] : u;
+    return { segments, triangles, text: { position: V.add(mid, V.mul(isVertical ? [1, 0, 0] : n, gap)), text: label, height: s, rotation: rotation + (isVertical ? Math.PI : 0), direction: dir, normal: e.normal || [0, 0, 1], align: 'center' } }; }
     function featureEdges(vertices, used, all = false) {
         if (all)
             return [...used.values()].map(e => [vertices[e.a], vertices[e.b]]);
