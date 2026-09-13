@@ -61,7 +61,7 @@
                 for (const alias of c.alias.split(/\s*[·]\s*/))
                     this.aliases.set(alias.trim().toUpperCase(), c.id);
             }
-            for (const [a, id] of Object.entries({ RECT: 'rectangle', RECTANGLE: 'rectangle', PL: 'polyline', DLI: 'dimension', DIM: 'dimension', DIMLINEAR: 'dimension', DELETE: 'erase', DEL: 'erase', SAVEAS: 'save', QSAVE: 'save', '3DO': 'orbit', SHADE: 'shaded-edges', SEISO: 'view-iso', ZOOMEXTENTS: 'fit', CLOSE: 'close-tool' }))
+            for (const [a, id] of Object.entries({ RECT: 'rectangle', RECTANGLE: 'rectangle', PL: 'polyline', DLI: 'dimension', DIM: 'dimension', DIMLINEAR: 'dimension', DIMVERT: 'dim-vertical', VERTDIM: 'dim-vertical', DIMHOR: 'dim-horizontal', HORDIM: 'dim-horizontal', DELETE: 'erase', DEL: 'erase', SAVEAS: 'save', QSAVE: 'save', '3DO': 'orbit', SHADE: 'shaded-edges', SEISO: 'view-iso', ZOOMEXTENTS: 'fit', CLOSE: 'close-tool' }))
                 this.aliases.set(a, id);
         }
         get doc() { return this.docs.find(d => d.id === this.activeId); }
@@ -388,8 +388,8 @@
                 this.doc.selection = new Set([id]);
             this.selectionChanged();
         } }
-        entityLabel(e) { return e.type === 'MESH' ? (e.primitive || 'Mesh solid') : ({ LINE: 'Line', POLYLINE: 'Polyline', CIRCLE: 'Circle', ARC: 'Arc', ELLIPSE: 'Ellipse', SPLINE: 'Spline', TEXT: 'Text', DIMENSION: 'Aligned dimension', HATCH: 'Hatch', POINT: 'Point' }[e.type] || e.type); }
-        entityIcon(e) { return e.type === 'MESH' ? 'box' : ({ LINE: 'line', POLYLINE: 'polyline', CIRCLE: 'circle', ARC: 'arc', ELLIPSE: 'ellipse', SPLINE: 'spline', TEXT: 'text', DIMENSION: 'dimension', HATCH: 'hatch', POINT: 'point' }[e.type] || 'drawing'); }
+        entityLabel(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'Vertical dimension' : 'Horizontal dimension'; return e.type === 'MESH' ? (e.primitive || 'Mesh solid') : ({ LINE: 'Line', POLYLINE: 'Polyline', CIRCLE: 'Circle', ARC: 'Arc', ELLIPSE: 'Ellipse', SPLINE: 'Spline', TEXT: 'Text', DIMENSION: 'Aligned dimension', HATCH: 'Hatch', POINT: 'Point' }[e.type] || e.type); }
+        entityIcon(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'dim-vertical' : 'dim-horizontal'; return e.type === 'MESH' ? 'box' : ({ LINE: 'line', POLYLINE: 'polyline', CIRCLE: 'circle', ARC: 'arc', ELLIPSE: 'ellipse', SPLINE: 'spline', TEXT: 'text', DIMENSION: 'dimension', HATCH: 'hatch', POINT: 'point' }[e.type] || 'drawing'); }
         refreshRibbon() { if (!this.doc)
             return; const layer = $('ribbon-layer'); if (layer) {
             layer.innerHTML = this.doc.layers.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
@@ -702,7 +702,7 @@
             $('command-suggestions').hidden = true;
             if (!this.doc)
                 return;
-            if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
+            if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'dim-vertical', 'dim-horizontal', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
                 this.startTool(id);
                 return;
             }
@@ -1189,7 +1189,7 @@
                 this.tool.reference = Math.max(...centerOf(selected).size, 1) / 2;
             if (id === 'paste')
                 this.tool.stage = 'points';
-            if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'hatch', 'text', 'point'].includes(id)) {
+            if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'dim-vertical', 'dim-horizontal', 'hatch', 'text', 'point'].includes(id)) {
                 this.camera.setView('top');
                 this.log('WCS', 'Switched to Top view for drawing on the world XY plane.');
             }
@@ -1215,6 +1215,8 @@
             case 'point': return 'Specify insertion point';
             case 'text': return 'Specify text insertion point';
             case 'dimension': return ['Specify first extension point', 'Specify second extension point', 'Specify dimension line position or offset'][n] || '';
+            case 'dim-vertical': return ['Specify first extension point', 'Specify second extension point', 'Specify vertical dimension line position'][n] || '';
+            case 'dim-horizontal': return ['Specify first extension point', 'Specify second extension point', 'Specify horizontal dimension line position'][n] || '';
             case 'measure': return n ? 'Specify second measurement point' : 'Specify first measurement point';
             case 'move':
             case 'copy': return n ? 'Specify destination or @dx,dy,dz' : 'Specify base point';
@@ -1703,15 +1705,23 @@
                     this.cancel(false);
                 }
             }
-            else if (id === 'dimension') {
+            else if (id === 'dimension' || id === 'dim-vertical' || id === 'dim-horizontal') {
                 if (n < 2) {
                     if (n && V.dist(t.points[0], p) < EPS)
                         throw Error('Dimension endpoints must be distinct.');
                     t.points.push(p.slice());
                 }
-                else {
+                else if (id === 'dimension') {
                     const normal = V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0]))), offset = V.dot(V.sub(p, t.points[0]), normal);
                     this.create({ type: 'DIMENSION', points: t.points, offset, textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision, layer: this.doc.layerMap.has('dimensions') ? 'dimensions' : this.doc.currentLayer }, 'Dimension');
+                    this.cancel(false);
+                }
+                else {
+                    const vertical = id === 'dim-vertical', axis = vertical ? [0, 1, 0] : [1, 0, 0], side = vertical ? [-1, 0, 0] : [0, 1, 0];
+                    if (Math.abs(V.dot(V.sub(t.points[1], t.points[0]), axis)) < EPS)
+                        throw Error(vertical ? 'Vertical dimension needs two points with different Y.' : 'Horizontal dimension needs two points with different X.');
+                    const offset = V.dot(V.sub(p, t.points[0]), side);
+                    this.create({ type: 'DIMENSION', kind: 'linear', measureAxis: axis, points: t.points, offset, textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision, layer: this.doc.layerMap.has('dimensions') ? 'dimensions' : this.doc.currentLayer }, vertical ? 'Vertical dimension' : 'Horizontal dimension');
                     this.cancel(false);
                 }
             }
@@ -2063,6 +2073,12 @@
                     const normal = V.norm(V.cross([0, 0, 1], V.sub(t.points[1], a)));
                     return [{ type: 'DIMENSION', points: t.points, offset: V.dot(V.sub(p, a), normal), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
                 }
+                if (t.id === 'dim-vertical' || t.id === 'dim-horizontal') {
+                    if (n < 2)
+                        return [{ type: 'LINE', points: [a, p] }];
+                    const vertical = t.id === 'dim-vertical', axis = vertical ? [0, 1, 0] : [1, 0, 0], side = vertical ? [-1, 0, 0] : [0, 1, 0];
+                    return [{ type: 'DIMENSION', kind: 'linear', measureAxis: axis, points: t.points, offset: V.dot(V.sub(p, a), side), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
+                }
             }
             catch { }
             return [];
@@ -2105,11 +2121,13 @@
                 case 'arc':
                     return xy();
                 case 'dimension':
+                case 'dim-vertical':
+                case 'dim-horizontal':
                     if (n < 2)
                         return xy();
                     try {
-                        const normal = V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0])));
-                        return { fields: [{ key: 'offset', label: 'Offset', value: fmt(V.dot(V.sub(w, t.points[0]), normal)) }], hint: 'Offset · Enter applies' };
+                        const side = t.id === 'dim-vertical' ? [-1, 0, 0] : t.id === 'dim-horizontal' ? [0, 1, 0] : V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0])));
+                        return { fields: [{ key: 'offset', label: 'Offset', value: fmt(V.dot(V.sub(w, t.points[0]), side)) }], hint: 'Offset · Enter applies' };
                     }
                     catch {
                         return xy();
@@ -2448,9 +2466,9 @@
             this.doc.transaction('Scale', () => this.doc.transform(t.selectedIds, M.around(a, M.scale(value))));
             this.cancel(false);
             return;
-        } if (t.id === 'dimension' && t.points.length === 2) {
-            const normal = V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0])));
-            this.acceptPoint(V.add(t.points[0], V.mul(normal, value)));
+        } if ((t.id === 'dimension' || t.id === 'dim-vertical' || t.id === 'dim-horizontal') && t.points.length === 2) {
+            const side = t.id === 'dim-vertical' ? [-1, 0, 0] : t.id === 'dim-horizontal' ? [0, 1, 0] : V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0])));
+            this.acceptPoint(V.add(t.points[0], V.mul(side, value)));
             return;
         } if (['circle', 'polygon'].includes(t.id)) {
             positive(value, 'Radius');
