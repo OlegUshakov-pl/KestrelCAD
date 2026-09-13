@@ -81,6 +81,11 @@
                     Object.assign(this.settings, preferences.settings || {});
                     Object.assign(this.defaults, preferences.defaults || {});
                 }
+                // Migrate stale 1mm dimension default to 10mm (old default leaked into saved prefs).
+                if (this.defaults.dimensionHeight === 1) {
+                    this.defaults.dimensionHeight = 10;
+                    this.savePreferences();
+                }
             }
             catch { }
             this.applyTheme();
