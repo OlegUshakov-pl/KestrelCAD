@@ -100,6 +100,7 @@
             for (const a of e.anchors) if (!a || typeof a.entity !== 'string' || !['point', 'center'].includes(a.kind) || a.kind === 'point' && (!Number.isInteger(a.index) || a.index < 0)) throw Error('Invalid anchor.');
         }
         if (e.kind && e.type === 'DIMENSION' && !['aligned', 'linear', 'radius', 'diameter', 'angular', 'ordinate-x', 'ordinate-y'].includes(e.kind)) throw Error('Unknown dimension mode.');
+        if (e.type === 'DIMENSION') for (const k of ['prefix', 'suffix']) if (e[k] !== undefined && (typeof e[k] !== 'string' || e[k].length > 255)) throw Error('Invalid dimension affix.');
         if (e.measureAxis) point(e.measureAxis);
     }
     function bind(doc) {
@@ -201,7 +202,7 @@
     }
     function dimension(e) {
         const doc = owners.get(e), style = doc?.production?.dimstyles.find(s => s.name === e.dimstyle), v = { ...style, ...e };
-        if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = style.prefix + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + style.suffix; return result; }
+        if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); return result; }
         const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [];
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');

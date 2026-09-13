@@ -264,8 +264,8 @@
                     else if (t === 'DIMENSION') {
                         const kind = num(r, 70) & 7;
                         if ((kind === 1 || kind === 0 && K.Production) && has(r, 13) && has(r, 14)) {
-                            const a = pt(r, 13), b = pt(r, 14), axis = [Math.cos(num(r,50)*Math.PI/180), Math.sin(num(r,50)*Math.PI/180),0], n = V.norm(V.cross(normal(r), kind === 0 ? axis : V.sub(b, a))), off = V.dot(V.sub(pt(r), a), n), text = str(r, 1);
-                            emit({ type: 'DIMENSION', kind: kind === 0 ? 'linear' : undefined, measureAxis: kind === 0 ? axis : undefined, dimstyle: K.Production ? decode(str(r,3,'STANDARD')) : undefined, points: [a, b], offset: off, normal: normal(r), text: text && text !== '<>' ? decode(text) : undefined, textHeight: Math.max(V.dist(a, b) * .025, .1) }, r, m, inherit);
+                            const a = pt(r, 13), b = pt(r, 14), axis = [Math.cos(num(r,50)*Math.PI/180), Math.sin(num(r,50)*Math.PI/180),0], n = V.norm(V.cross(normal(r), kind === 0 ? axis : V.sub(b, a))), off = V.dot(V.sub(pt(r), a), n), text = str(r, 1), raw = text && text !== '<>' ? decode(text) : undefined, cut = raw ? raw.indexOf('<>') : -1;
+                            emit({ type: 'DIMENSION', kind: kind === 0 ? 'linear' : undefined, measureAxis: kind === 0 ? axis : undefined, dimstyle: K.Production ? decode(str(r,3,'STANDARD')) : undefined, points: [a, b], offset: off, normal: normal(r), text: cut < 0 ? raw : undefined, prefix: cut < 0 ? undefined : raw.slice(0, cut), suffix: cut < 0 ? undefined : raw.slice(cut + 2), textHeight: Math.max(V.dist(a, b) * .025, .1) }, r, m, inherit);
                         }
                         else if (blocks.has(str(r, 2))) {
                             readRecords(blocks.get(str(r, 2)).records, m, common(r, inherit).layer, [...stack, str(r, 2)]);
@@ -529,7 +529,7 @@
                 const n = V.norm(V.cross(e.normal || [0, 0, 1], e.kind === 'linear' ? e.measureAxis || [1,0,0] : V.sub(e.points[1], e.points[0])));
                 point(10, V.add(e.points[1], V.mul(n, e.offset || 0)));
                 point(11, d.text.position);
-                put(70, e.kind === 'linear' ? 32 : 33, 1, e.text ? esc(e.text) : '<>', 3, 'STANDARD', 100, 'AcDbAlignedDimension');
+                put(70, e.kind === 'linear' ? 32 : 33, 1, e.text ? esc(e.text) : e.prefix || e.suffix ? esc((e.prefix || '') + '<>' + (e.suffix || '')) : '<>', 3, 'STANDARD', 100, 'AcDbAlignedDimension');
                 point(13, e.points[0]);
                 point(14, e.points[1]);
                 if(e.kind==='linear')put(100,'AcDbRotatedDimension',50,Math.atan2((e.measureAxis||[1,0,0])[1],(e.measureAxis||[1,0,0])[0])*180/Math.PI);

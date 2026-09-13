@@ -597,6 +597,8 @@
                     html += input('Offset', 'offset', one.offset || 0);
                     html += input('Text height', 'textHeight', one.textHeight || 10, 'number', 'min="0.0001"');
                     html += input('Text override', 'text', one.text || '', 'text');
+                    html += input('Text before', 'prefix', one.prefix || '', 'text');
+                    html += input('Text after', 'suffix', one.suffix || '', 'text');
                     html += input('Precision', 'precision', one.precision ?? this.defaults.precision, 'number', 'min="0" max="6" step="1"');
                 }
                 else if (one.type === 'MESH') {
@@ -676,7 +678,7 @@
                     target = target[p];
                 target[parts.at(-1)] = finite(value);
             }
-            else if (['layer', 'color', 'linetype', 'name', 'text', 'pattern'].includes(key)) {
+            else if (['layer', 'color', 'linetype', 'name', 'text', 'prefix', 'suffix', 'pattern'].includes(key)) {
                 if (key === 'layer' && !value)
                     continue;
                 e[key] = value;

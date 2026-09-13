@@ -77,7 +77,7 @@
         const w1 = V.add(p, V.add(V.mul(u, dir * s), V.mul(n, s * .28))), w2 = V.add(p, V.add(V.mul(u, dir * s), V.mul(n, -s * .28)));
         segments.push([p, w1]); segments.push([p, w2]);
         triangles.push({ points: [p, w1, w2], normal: e.normal || [0, 0, 1] });
-    } const isVertical = Math.abs(u[0]) < .3, label = e.text || len.toFixed(e.precision ?? 0), gap = isVertical ? s * (.24 + .12 * label.length) : s * .24;
+    } const isVertical = Math.abs(u[0]) < .3, label = e.text || ((e.prefix || '') + len.toFixed(e.precision ?? 0) + (e.suffix || '')), gap = isVertical ? s * (.24 + .12 * label.length) : s * .24;
     const nn = e.normal || [0, 0, 1];
     let dir, side, rotation;
     if (isVertical) { dir = [0, 1, 0]; side = [-1, 0, 0]; rotation = Math.PI / 2; }
