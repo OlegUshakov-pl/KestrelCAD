@@ -8449,7 +8449,10 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
             else
                 this.startTool(id, { distance: value }); } }); }
         cornerOperation(id, e1, e2, distance, pick1 = null, pick2 = null) { const hit = lineIntersection(...e1.points, ...e2.points); if (!hit)
-            throw Error('Parallel lines do not define a corner.'); const p = hit.point, far = (e, pick) => pick ? e.points.reduce((a, b) => V.dist(a, pick) < V.dist(b, pick) ? a : b) : e.points.reduce((a, b) => V.dist(a, p) > V.dist(b, p) ? a : b), a = far(e1, pick1), b = far(e2, pick2), u = V.norm(V.sub(a, p)), v = V.norm(V.sub(b, p)), theta = Math.acos(clamp(V.dot(u, v), -1, 1)); if (theta < .001 || Math.abs(theta - Math.PI) < .001)
+            throw Error('Parallel lines do not define a corner.'); const p = hit.point, farthest = e => e.points.reduce((a, b) => V.dist(a, p) > V.dist(b, p) ? a : b), side = (e, pick) => { const p0 = e.points[0], p1 = e.points[1], d = V.sub(p1, p0), len = V.len(d); if (!(len > EPS))
+                return p0; const dir = V.mul(d, 1 / len), sPick = V.dot(V.sub(pick, p), dir), s0 = V.dot(V.sub(p0, p), dir), s1 = V.dot(V.sub(p1, p), dir); if (Math.abs(sPick) < 1e-9)
+                return farthest(e); const straddle = (s0 > 1e-9 && s1 < -1e-9) || (s0 < -1e-9 && s1 > 1e-9); if (straddle)
+                return sPick > 0 ? (s0 > s1 ? p0 : p1) : (s0 < s1 ? p0 : p1); return farthest(e); }, far = (e, pick) => pick ? side(e, pick) : farthest(e), a = far(e1, pick1), b = far(e2, pick2), u = V.norm(V.sub(a, p)), v = V.norm(V.sub(b, p)), theta = Math.acos(clamp(V.dot(u, v), -1, 1)); if (theta < .001 || Math.abs(theta - Math.PI) < .001)
             throw Error('The corner angle is degenerate.'); const setback = id === 'fillet' ? distance / Math.tan(theta / 2) : distance; if (setback > V.dist(a, p) + EPS || setback > V.dist(b, p) + EPS)
             throw Error('The radius or setback is too large for the selected segments.'); const t1 = V.add(p, V.mul(u, setback)), t2 = V.add(p, V.mul(v, setback)); this.doc.transaction(id === 'fillet' ? 'Fillet lines' : 'Chamfer lines', () => { this.doc.replace(e1.id, { ...e1, points: [a, t1] }); this.doc.replace(e2.id, { ...e2, points: [b, t2] }); if (id === 'chamfer')
             this.addGeometry({ type: 'LINE', points: [t1, t2], layer: e1.layer });
