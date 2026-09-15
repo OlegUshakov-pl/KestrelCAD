@@ -8,7 +8,7 @@
         ['leader','Leader','MLEADER','text'], ['table','Table','TABLE','grid'], ['associative-hatch','Hatch islands','HATCHISLANDS','hatch'], ['stretch','Stretch','STRETCH','move'], ['break','Break curve','BREAK','trim'], ['align2','Align','ALIGN','rotate'],
         ['xref-attach','Attach reference','XATTACH','insert'], ['xref-manager','References','XREF','layers'], ['layout-manager','Layouts','LAYOUT','drawing'], ['plot-layout','Plot scaled layout','PLOT','print'], ['ucs-manager','Coordinate system','UCS','ortho']
     ];
-    for (const [id,label,alias,icon] of definitions) U.commands.push({id,label,alias,icon,description:label+' — persistent drafting tools'});
+    for (const [id,label,alias,icon] of definitions) { if (!U.commands.some(c=>c.id===id)) U.commands.push({id,label,alias,icon,description:label+' — persistent drafting tools'}); }
     U.groups.Drafting = [
         {name:'Blocks',large:['block-create','block-insert'],columns:[['block-edit','block-save','attributes']]},
         {name:'Annotation',columns:[['dim-linear','dim-radius','dim-diameter'],['dim-angular','dim-ordinate','dimstyles'],['leader','table','associative-hatch']]},
@@ -82,6 +82,7 @@
             case 'attributes':{const [e,b]=selectedBlock();this.dialog({title:'Block attributes',wide:true,html:`<p>Definition tags have local positions; values below affect only this instance.</p>${jsonField('definitions',b.attributes||[],'Definitions: tag, value, position, height, hidden')}${jsonField('values',e.attributes||{},'Instance values by tag')}`,onSubmit:f=>{const defs=JSON.parse(f.definitions),values=JSON.parse(f.values);doc.transaction('Edit attributes',()=>{b.attributes=defs;doc.replace(e.id,{...e,attributes:values});});}});break;}
             case 'dimstyles':this.dialog({title:'Dimension styles',wide:true,html:jsonField('styles',p.dimstyles,'Named styles (textHeight, precision, scale, prefix, suffix)'),onSubmit:f=>{doc.transaction('Dimension styles',()=>{p.dimstyles=JSON.parse(f.styles);});}});break;
             case 'dim-linear':case 'dim-radius':case 'dim-diameter':case 'dim-angular':case 'dim-ordinate':{
+                if(id==='dim-angular'&&!selected.length){ await originalRun.call(this,id); break; }
                 const kind=id.slice(4),e=selected[0],defaultPoints=e?.points?.slice(0,2)||[[0,0,0],[100,50,0]];
                 this.dialog({title:U.get(id).label,html:`<div class="form-grid">${select('style','Style',p.dimstyles.map(s=>[s.name,s.name]))}${field('a',kind==='angular'?'Vertex XYZ':'Origin / first XYZ',defaultPoints[0].join(','),'text')}${field('b','Second point XYZ',defaultPoints[1]?.join(',')||'100,50,0','text')}${kind==='angular'?field('c','Third point XYZ','0,100,0','text'):''}${field('offset','Offset / angular radius',20)}${kind==='linear'||kind==='ordinate'?select('axis','Axis',[['x','X'],['y','Y']]):''}<label class="form-check"><input type="checkbox" name="associate" checked>Associate selected line endpoints (linear dimensions)</label></div>`,onSubmit:f=>{
                     let points=[xyz(f.a),xyz(f.b)],anchors;

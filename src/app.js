@@ -704,7 +704,7 @@
             $('command-suggestions').hidden = true;
             if (!this.doc)
                 return;
-            if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'dim-vertical', 'dim-horizontal', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
+            if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'centerline', 'centermark', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
                 this.startTool(id);
                 return;
             }
@@ -1192,9 +1192,11 @@
                 this.tool.source = selected[0];
             if (id === 'scale')
                 this.tool.reference = Math.max(...centerOf(selected).size, 1) / 2;
+            if (id === 'centermark' && selected.length === 1 && (selected[0].type === 'CIRCLE' || selected[0].type === 'ARC'))
+                this.tool.params.circleId = selected[0].id;
             if (id === 'paste')
                 this.tool.stage = 'points';
-            if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'dim-vertical', 'dim-horizontal', 'hatch', 'text', 'point'].includes(id)) {
+            if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'centerline', 'centermark', 'hatch', 'text', 'point'].includes(id)) {
                 this.camera.setView('top');
                 this.log('WCS', 'Switched to Top view for drawing on the world XY plane.');
             }
@@ -1222,6 +1224,9 @@
             case 'dimension': return ['Specify first extension point', 'Specify second extension point', 'Specify dimension line position or offset'][n] || '';
             case 'dim-vertical': return ['Specify first extension point', 'Specify second extension point', 'Specify vertical dimension line position'][n] || '';
             case 'dim-horizontal': return ['Specify first extension point', 'Specify second extension point', 'Specify horizontal dimension line position'][n] || '';
+            case 'dim-angular': return ['Specify angle vertex', 'Specify first ray point', 'Specify second ray point', 'Specify arc radius position'][n] || '';
+            case 'centerline': return n ? 'Specify second axis point' : 'Specify first axis point';
+            case 'centermark': if (t.params.circleId) return 'Click to place center mark on selected circle'; return n ? 'Specify point on circle (radius)' : 'Specify center point';
             case 'measure': return n ? 'Specify second measurement point' : 'Specify first measurement point';
             case 'move':
             case 'copy': return n ? 'Specify destination or @dx,dy,dz' : 'Specify base point';
@@ -1730,6 +1735,68 @@
                     this.cancel(false);
                 }
             }
+            else if (id === 'dim-angular') {
+                if (n < 3) {
+                    if (n === 1 && V.dist(t.points[0], p) < EPS)
+                        throw Error('Vertex and ray points must be distinct.');
+                    if (n === 2 && (V.dist(t.points[0], p) < EPS || V.dist(t.points[1], p) < EPS))
+                        throw Error('Vertex and ray points must be distinct.');
+                    t.points.push(p.slice());
+                }
+                else {
+                    const [v, a, b] = t.points, u = V.sub(a, v), w = V.sub(b, v);
+                    if (V.len(u) < EPS || V.len(w) < EPS)
+                        throw Error('Vertex and ray points must be distinct.');
+                    const cross = u[0] * w[1] - u[1] * w[0];
+                    if (Math.abs(cross) < 1e-9)
+                        throw Error('Angular dimension needs two non-collinear rays.');
+                    const radius = Math.max(EPS, V.dist(v, p));
+                    this.create({ type: 'DIMENSION', kind: 'angular', points: t.points.map(q => q.slice()), offset: radius, textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision, layer: this.doc.layerMap.has('dimensions') ? 'dimensions' : this.doc.currentLayer }, 'Angular dimension');
+                    this.cancel(false);
+                }
+            }
+            else if (id === 'centerline') {
+                if (!n)
+                    t.points.push(p.slice());
+                else {
+                    const a = t.points[0];
+                    if (V.dist(a, p) < EPS)
+                        throw Error('Centerline endpoints must be distinct.');
+                    const d = V.sub(p, a), len = V.len(d), ext = Math.max(len * 0.1, this.defaults.dimensionHeight || 10);
+                    const u = V.mul(d, 1 / len), start = V.sub(a, V.mul(u, ext)), end = V.add(p, V.mul(u, ext));
+                    this.create({ type: 'LINE', points: [start, end], linetype: 'Center', layer: this.doc.layerMap.has('construction') ? 'construction' : this.doc.currentLayer }, 'Centerline');
+                    this.cancel(false);
+                }
+            }
+            else if (id === 'centermark') {
+                const picked = t.params.circleId && this.doc.byId.get(t.params.circleId);
+                const source = picked && (picked.type === 'CIRCLE' || picked.type === 'ARC') ? picked : null;
+                if (source && !n) {
+                    const c = source.center.slice(), r = Math.max(EPS, V.len(G.conicAxes(source).x)), ext = Math.max(r * 0.25, this.defaults.dimensionHeight || 10);
+                    const layer = this.doc.layerMap.has('construction') ? 'construction' : this.doc.currentLayer;
+                    this.doc.transaction('Center mark', () => {
+                        this.addGeometry({ type: 'LINE', points: [[c[0] - r - ext, c[1], c[2]], [c[0] + r + ext, c[1], c[2]]], linetype: 'Center', layer }, false);
+                        this.addGeometry({ type: 'LINE', points: [[c[0], c[1] - r - ext, c[2]], [c[0], c[1] + r + ext, c[2]]], linetype: 'Center', layer }, false);
+                    });
+                    this.log('CENTERMARK', 'Created center mark.');
+                    this.cancel(false);
+                }
+                else if (!n)
+                    t.points.push(p.slice());
+                else {
+                    const c = t.points[0], r = V.dist(c, p);
+                    if (r < EPS)
+                        throw Error('Center mark radius must be positive.');
+                    const ext = Math.max(r * 0.25, (this.defaults.dimensionHeight || 10) * 0.5);
+                    const layer = this.doc.layerMap.has('construction') ? 'construction' : this.doc.currentLayer;
+                    this.doc.transaction('Center mark', () => {
+                        this.addGeometry({ type: 'LINE', points: [[c[0] - r - ext, c[1], c[2]], [c[0] + r + ext, c[1], c[2]]], linetype: 'Center', layer }, false);
+                        this.addGeometry({ type: 'LINE', points: [[c[0], c[1] - r - ext, c[2]], [c[0], c[1] + r + ext, c[2]]], linetype: 'Center', layer }, false);
+                    });
+                    this.log('CENTERMARK', 'Created center mark.');
+                    this.cancel(false);
+                }
+            }
             else if (id === 'measure') {
                 if (!n)
                     t.points.push(p.slice());
@@ -2084,6 +2151,29 @@
                     const vertical = t.id === 'dim-vertical', axis = vertical ? [0, 1, 0] : [1, 0, 0], side = vertical ? [-1, 0, 0] : [0, 1, 0];
                     return [{ type: 'DIMENSION', kind: 'linear', measureAxis: axis, points: t.points, offset: V.dot(V.sub(p, a), side), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
                 }
+                if (t.id === 'dim-angular') {
+                    if (n === 1)
+                        return [{ type: 'LINE', points: [a, p] }];
+                    if (n === 2)
+                        return [{ type: 'LINE', points: [a, t.points[1]] }, { type: 'LINE', points: [a, p] }];
+                    return [{ type: 'DIMENSION', kind: 'angular', points: t.points, offset: Math.max(1e-6, V.dist(a, p)), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
+                }
+                if (t.id === 'centerline') {
+                    if (!n)
+                        return [];
+                    return [{ type: 'LINE', points: [a, p], linetype: 'Center' }];
+                }
+                if (t.id === 'centermark') {
+                    const src = t.params.circleId && this.doc.byId.get(t.params.circleId);
+                    if (src && (src.type === 'CIRCLE' || src.type === 'ARC')) {
+                        const c = src.center, r = Math.max(1e-6, V.len(G.conicAxes(src).x)), ext = Math.max(r * 0.25, this.defaults.dimensionHeight || 10);
+                        return [{ type: 'LINE', points: [[c[0] - r - ext, c[1], c[2]], [c[0] + r + ext, c[1], c[2]]], linetype: 'Center' }, { type: 'LINE', points: [[c[0], c[1] - r - ext, c[2]], [c[0], c[1] + r + ext, c[2]]], linetype: 'Center' }];
+                    }
+                    if (!n)
+                        return [];
+                    const r = Math.max(1e-6, V.dist(a, p)), ext = Math.max(r * 0.25, (this.defaults.dimensionHeight || 10) * 0.5);
+                    return [{ type: 'LINE', points: [[a[0] - r - ext, a[1], a[2]], [a[0] + r + ext, a[1], a[2]]], linetype: 'Center' }, { type: 'LINE', points: [[a[0], a[1] - r - ext, a[2]], [a[0], a[1] + r + ext, a[2]]], linetype: 'Center' }];
+                }
             }
             catch { }
             return [];
@@ -2128,7 +2218,10 @@
                 case 'dimension':
                 case 'dim-vertical':
                 case 'dim-horizontal':
-                    if (n < 2)
+                case 'dim-angular':
+                case 'centerline':
+                case 'centermark':
+                    if (n < (t.id === 'dim-angular' ? 3 : t.id === 'dimension' || t.id === 'dim-vertical' || t.id === 'dim-horizontal' ? 2 : 1))
                         return xy();
                     try {
                         const side = t.id === 'dim-vertical' ? [-1, 0, 0] : t.id === 'dim-horizontal' ? [0, 1, 0] : V.norm(V.cross([0, 0, 1], V.sub(t.points[1], t.points[0])));

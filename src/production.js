@@ -193,7 +193,7 @@
             let broken = false;
             const p = e.anchors.map(a => { const source = doc.byId.get(a.entity), value = a.kind === 'center' ? source?.center : source?.points?.[a.index]; if (!value) broken = true; return value && value.slice(); });
             e.associationBroken = broken;
-            if (!broken && e.type === 'DIMENSION') e.points = p;
+            if (!broken && (e.type === 'DIMENSION' || ((e.type === 'LINE' || e.type === 'POLYLINE') && e.anchors.length === e.points.length))) e.points = p;
         }
         for (const e of doc.entities) if (e.type === 'HATCH' && e.boundaryIds?.length) {
             const sources = e.boundaryIds.map(id => doc.byId.get(id)); e.associationBroken = sources.some(s => !s || !G.closed(s));
