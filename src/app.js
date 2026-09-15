@@ -1194,6 +1194,13 @@
                 this.tool.reference = Math.max(...centerOf(selected).size, 1) / 2;
             if (id === 'centermark' && selected.length === 1 && (selected[0].type === 'CIRCLE' || selected[0].type === 'ARC'))
                 this.tool.params.circleId = selected[0].id;
+            if (id === 'dim-angular') {
+                const lines = selected.filter(e => e.type === 'LINE');
+                this.tool.params.lineIds = lines.slice(0, 2).map(e => e.id);
+                this.tool.params.pickPoints = [];
+                if (this.tool.params.lineIds.length < 2)
+                    this.tool.stage = 'pick';
+            }
             if (id === 'paste')
                 this.tool.stage = 'points';
             if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'centerline', 'centermark', 'hatch', 'text', 'point'].includes(id)) {
@@ -1210,7 +1217,8 @@
         }
         prompt() { const t = this.tool; if (!t)
             return ''; const n = t.points.length; if (t.stage === 'selection')
-            return 'Select objects, then press Enter'; switch (t.id) {
+            return 'Select objects, then press Enter'; if (t.id === 'dim-angular' && t.stage === 'pick')
+            return (t.params.lineIds || []).length ? 'Select second line (Enter for manual points)' : 'Select first line (Enter for manual points)'; switch (t.id) {
             case 'line': return n ? 'Specify next point or [Undo]' : 'Specify first point';
             case 'polyline': return n ? 'Next vertex or [Close / Undo / Enter]' : 'Specify first vertex';
             case 'spline': return n ? 'Next control point or Enter to finish' : 'Specify first control point';
@@ -1224,7 +1232,7 @@
             case 'dimension': return ['Specify first extension point', 'Specify second extension point', 'Specify dimension line position or offset'][n] || '';
             case 'dim-vertical': return ['Specify first extension point', 'Specify second extension point', 'Specify vertical dimension line position'][n] || '';
             case 'dim-horizontal': return ['Specify first extension point', 'Specify second extension point', 'Specify horizontal dimension line position'][n] || '';
-            case 'dim-angular': return ['Specify angle vertex', 'Specify first ray point', 'Specify second ray point', 'Specify arc radius position'][n] || '';
+            case 'dim-angular': if ((t.params.lineIds || []).length === 2) return 'Specify arc radius position'; return ['Specify angle vertex', 'Specify first ray point', 'Specify second ray point', 'Specify arc radius position'][n] || '';
             case 'centerline': return n ? 'Specify second axis point' : 'Specify first axis point';
             case 'centermark': if (t.params.circleId) return 'Click to place center mark on selected circle'; return n ? 'Specify point on circle (radius)' : 'Specify center point';
             case 'measure': return n ? 'Specify second measurement point' : 'Specify first measurement point';
@@ -1272,6 +1280,15 @@
                 t.stage = 'points';
                 if (t.id === 'scale')
                     t.reference = Math.max(...centerOf(selected).size, 1) / 2;
+                this.updateToolPrompt();
+                this.invalidate();
+                return;
+            }
+            if (t.id === 'dim-angular' && t.stage === 'pick') {
+                t.stage = 'points';
+                t.params.lineIds = [];
+                t.params.pickPoints = [];
+                this.log('DIM-ANGULAR', 'Manual mode. Specify angle vertex.');
                 this.updateToolPrompt();
                 this.invalidate();
                 return;
@@ -1570,6 +1587,25 @@
                     this.cancel(false);
                     return;
                 }
+                if (id === 'dim-angular') {
+                    if (!hit || hit.e.type !== 'LINE')
+                        throw Error('Select two lines, or press Enter to place the vertex manually.');
+                    t.params.lineIds = t.params.lineIds || [];
+                    t.params.pickPoints = t.params.pickPoints || [];
+                    if (t.params.lineIds.includes(hit.e.id))
+                        throw Error('Select two distinct lines.');
+                    t.params.lineIds.push(hit.e.id);
+                    t.params.pickPoints.push(p.slice());
+                    this.doc.selection = new Set(t.params.lineIds);
+                    this.selectionChanged();
+                    if (t.params.lineIds.length >= 2) {
+                        t.stage = 'points';
+                        this.log('DIM-ANGULAR', 'Lines selected. Specify arc radius position.');
+                    }
+                    this.updateToolPrompt();
+                    this.invalidate();
+                    return;
+                }
                 if (!hit)
                     throw Error('No eligible editable object at that point.');
                 if (id === 'hatch' || id === 'extrude') {
@@ -1736,7 +1772,13 @@
                 }
             }
             else if (id === 'dim-angular') {
-                if (n < 3) {
+                if ((t.params.lineIds || []).length === 2) {
+                    const pts = this.angularPointsFromLines(t.params.lineIds[0], t.params.lineIds[1], t.params.pickPoints?.[0], t.params.pickPoints?.[1]);
+                    const radius = Math.max(EPS, V.dist(pts[0], p));
+                    this.create({ type: 'DIMENSION', kind: 'angular', points: pts, offset: radius, textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision, layer: this.doc.layerMap.has('dimensions') ? 'dimensions' : this.doc.currentLayer }, 'Angular dimension');
+                    this.cancel(false);
+                }
+                else if (n < 3) {
                     if (n === 1 && V.dist(t.points[0], p) < EPS)
                         throw Error('Vertex and ray points must be distinct.');
                     if (n === 2 && (V.dist(t.points[0], p) < EPS || V.dist(t.points[1], p) < EPS))
@@ -1824,6 +1866,37 @@
             this.updateToolPrompt();
             this.updateDynamic();
             this.invalidate();
+        }
+        angularPointsFromLines(id1, id2, pick1, pick2) {
+            const e1 = this.doc.byId.get(id1), e2 = this.doc.byId.get(id2);
+            if (!e1 || !e2 || e1.type !== 'LINE' || e2.type !== 'LINE')
+                throw Error('Angular dimension needs two lines.');
+            const [a1, b1] = e1.points, [a2, b2] = e2.points;
+            const d1 = V.sub(b1, a1), d2 = V.sub(b2, a2);
+            if (V.len(d1) < EPS || V.len(d2) < EPS)
+                throw Error('Selected lines are degenerate.');
+            if (Math.abs(d1[0] * d2[1] - d1[1] * d2[0]) < 1e-9 * V.len(d1) * V.len(d2))
+                throw Error('Selected lines are parallel.');
+            const t = ((a2[0] - a1[0]) * d2[1] - (a2[1] - a1[1]) * d2[0]) / (d1[0] * d2[1] - d1[1] * d2[0]);
+            const v = V.add(a1, V.mul(d1, t));
+            const ray = (a, d, pick) => {
+                let q;
+                if (pick) {
+                    const s = V.dot(V.sub(pick, a), d) / V.dot(d, d);
+                    q = V.add(a, V.mul(d, s));
+                }
+                else
+                    q = V.dist(a, v) > V.dist(V.add(a, d), v) ? a.slice() : V.add(a, d);
+                if (V.dist(q, v) < EPS)
+                    throw Error('Pick points must be away from the line intersection.');
+                return q;
+            };
+            let r1 = ray(a1, d1, pick1), r2 = ray(a2, d2, pick2);
+            // A line pair has two supplementary angles; report the smaller one (<= 180).
+            const u = V.norm(V.sub(r1, v)), w = V.norm(V.sub(r2, v));
+            if (Math.atan2(u[0] * w[1] - u[1] * w[0], u[0] * w[0] + u[1] * w[1]) < 0)
+                [r1, r2] = [r2, r1];
+            return [v, r1, r2];
         }
         offsetSide(e, p) { if (e.center)
             return V.dist(e.center, p) > V.len(G.conicAxes(e).x) ? 1 : -1; if (e.type === 'POLYLINE' && e.closed)
@@ -2152,6 +2225,10 @@
                     return [{ type: 'DIMENSION', kind: 'linear', measureAxis: axis, points: t.points, offset: V.dot(V.sub(p, a), side), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
                 }
                 if (t.id === 'dim-angular') {
+                    if ((t.params.lineIds || []).length === 2) {
+                        const pts = this.angularPointsFromLines(t.params.lineIds[0], t.params.lineIds[1], t.params.pickPoints?.[0], t.params.pickPoints?.[1]);
+                        return [{ type: 'DIMENSION', kind: 'angular', points: pts, offset: Math.max(1e-6, V.dist(pts[0], p)), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
+                    }
                     if (n === 1)
                         return [{ type: 'LINE', points: [a, p] }];
                     if (n === 2)
