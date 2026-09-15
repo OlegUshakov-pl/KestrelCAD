@@ -600,6 +600,7 @@
                     html += input('Text before', 'prefix', one.prefix || '', 'text');
                     html += input('Text after', 'suffix', one.suffix || '', 'text');
                     html += input('Precision', 'precision', one.precision ?? this.defaults.precision, 'number', 'min="0" max="6" step="1"');
+                    html += row('Text rotate', `<select data-prop="textRotate" aria-label="Text rotation">${['standard', 'horizontal'].map(v => `<option ${(one.textRotate || 'standard') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`);
                 }
                 else if (one.type === 'MESH') {
                     const b = centerOf([one]);
@@ -682,6 +683,10 @@
                 if (key === 'layer' && !value)
                     continue;
                 e[key] = value;
+            }
+            else if (key === 'textRotate') {
+                if (value === 'horizontal') e.textRotate = 'horizontal';
+                else delete e.textRotate;
             }
             else if (key === 'closed')
                 e.closed = !!value;
@@ -2145,6 +2150,10 @@
                 if (e.type === 'DIMENSION') {
                     const n = V.norm(V.cross([0, 0, 1], V.sub(e.points[1], e.points[0])));
                     result.push({ kind: 'dim-offset', point: V.add(V.lerp(...e.points, .5), V.mul(n, e.offset || 0)) });
+                    try {
+                        result.push({ kind: 'dim-text', point: G.dimension(e).text.position.slice() });
+                    }
+                    catch { /* Rendered text position is unavailable for invalid dimensions. */ }
                 }
             }
             else if (e.type === 'SPLINE')
@@ -2208,6 +2217,9 @@
         else if (grip.kind === 'dim-offset') {
             const n = V.norm(V.cross([0, 0, 1], V.sub(e.points[1], e.points[0])));
             e.offset = V.dot(V.sub(p, V.lerp(...e.points, .5)), n);
+        }
+        else if (grip.kind === 'dim-text') {
+            e.textPosition = p.slice();
         } return e; }
         previewGeometry() {
             const t = this.tool, p = this.pointer.world;

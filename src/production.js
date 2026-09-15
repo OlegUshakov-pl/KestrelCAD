@@ -101,6 +101,7 @@
         }
         if (e.kind && e.type === 'DIMENSION' && !['aligned', 'linear', 'radius', 'diameter', 'angular', 'ordinate-x', 'ordinate-y'].includes(e.kind)) throw Error('Unknown dimension mode.');
         if (e.type === 'DIMENSION') for (const k of ['prefix', 'suffix']) if (e[k] !== undefined && (typeof e[k] !== 'string' || e[k].length > 255)) throw Error('Invalid dimension affix.');
+        if (e.type === 'DIMENSION' && e.textRotate !== undefined && e.textRotate !== 'standard' && e.textRotate !== 'horizontal') throw Error('Invalid dimension text rotation.');
         if (e.measureAxis) point(e.measureAxis);
     }
     function bind(doc) {
@@ -247,6 +248,7 @@
         let rotation;
         if (isVertical) { rotation = Math.PI / 2; direction = [0, 1, 0]; }
         else { if (direction[0] < 0) direction = V.mul(direction, -1); rotation = Math.atan2(direction[1], direction[0]); }
+        if (e.textRotate === 'horizontal') { rotation = 0; direction = [1, 0, 0]; }
         return { segments, triangles, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
