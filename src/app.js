@@ -388,8 +388,8 @@
                 this.doc.selection = new Set([id]);
             this.selectionChanged();
         } }
-        entityLabel(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'Vertical dimension' : 'Horizontal dimension'; return e.type === 'MESH' ? (e.primitive || 'Mesh solid') : ({ LINE: 'Line', POLYLINE: 'Polyline', CIRCLE: 'Circle', ARC: 'Arc', ELLIPSE: 'Ellipse', SPLINE: 'Spline', TEXT: 'Text', DIMENSION: 'Aligned dimension', HATCH: 'Hatch', POINT: 'Point' }[e.type] || e.type); }
-        entityIcon(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'dim-vertical' : 'dim-horizontal'; return e.type === 'MESH' ? 'box' : ({ LINE: 'line', POLYLINE: 'polyline', CIRCLE: 'circle', ARC: 'arc', ELLIPSE: 'ellipse', SPLINE: 'spline', TEXT: 'text', DIMENSION: 'dimension', HATCH: 'hatch', POINT: 'point' }[e.type] || 'drawing'); }
+        entityLabel(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'Vertical dimension' : 'Horizontal dimension'; if (e.type === 'DIMENSION' && e.kind === 'angular') return 'Angular dimension'; if (e.type === 'DIMENSION' && e.kind === 'radius') return 'Radius dimension'; if (e.type === 'DIMENSION' && e.kind === 'diameter') return 'Diameter dimension'; return e.type === 'MESH' ? (e.primitive || 'Mesh solid') : ({ LINE: 'Line', POLYLINE: 'Polyline', CIRCLE: 'Circle', ARC: 'Arc', ELLIPSE: 'Ellipse', SPLINE: 'Spline', TEXT: 'Text', DIMENSION: 'Aligned dimension', HATCH: 'Hatch', POINT: 'Point' }[e.type] || e.type); }
+        entityIcon(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'dim-vertical' : 'dim-horizontal'; if (e.type === 'DIMENSION' && ['angular', 'radius', 'diameter'].includes(e.kind)) return 'dim-' + e.kind; return e.type === 'MESH' ? 'box' : ({ LINE: 'line', POLYLINE: 'polyline', CIRCLE: 'circle', ARC: 'arc', ELLIPSE: 'ellipse', SPLINE: 'spline', TEXT: 'text', DIMENSION: 'dimension', HATCH: 'hatch', POINT: 'point' }[e.type] || 'drawing'); }
         refreshRibbon() { if (!this.doc)
             return; const layer = $('ribbon-layer'); if (layer) {
             layer.innerHTML = this.doc.layers.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
@@ -704,7 +704,7 @@
             $('command-suggestions').hidden = true;
             if (!this.doc)
                 return;
-            if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'centerline', 'centermark', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
+            if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'dim-radius', 'dim-diameter', 'centerline', 'centermark', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
                 this.startTool(id);
                 return;
             }
@@ -1201,9 +1201,16 @@
                 if (this.tool.params.lineIds.length < 2)
                     this.tool.stage = 'pick';
             }
+            if (id === 'dim-radius' || id === 'dim-diameter') {
+                const found = selected.find(e => e.type === 'CIRCLE' || (id === 'dim-radius' && e.type === 'ARC'));
+                if (found)
+                    this.tool.params.circleId = found.id;
+                else
+                    this.tool.stage = 'pick';
+            }
             if (id === 'paste')
                 this.tool.stage = 'points';
-            if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'centerline', 'centermark', 'hatch', 'text', 'point'].includes(id)) {
+            if (Math.abs(this.camera.direction[2]) < .015 && ['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'polygon', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'dim-radius', 'dim-diameter', 'centerline', 'centermark', 'hatch', 'text', 'point'].includes(id)) {
                 this.camera.setView('top');
                 this.log('WCS', 'Switched to Top view for drawing on the world XY plane.');
             }
@@ -1218,7 +1225,8 @@
         prompt() { const t = this.tool; if (!t)
             return ''; const n = t.points.length; if (t.stage === 'selection')
             return 'Select objects, then press Enter'; if (t.id === 'dim-angular' && t.stage === 'pick')
-            return (t.params.lineIds || []).length ? 'Select second line (Enter for manual points)' : 'Select first line (Enter for manual points)'; switch (t.id) {
+            return (t.params.lineIds || []).length ? 'Select second line (Enter for manual points)' : 'Select first line (Enter for manual points)'; if ((t.id === 'dim-radius' || t.id === 'dim-diameter') && t.stage === 'pick')
+            return t.id === 'dim-diameter' ? 'Select circle for diameter' : 'Select circle or arc for radius'; switch (t.id) {
             case 'line': return n ? 'Specify next point or [Undo]' : 'Specify first point';
             case 'polyline': return n ? 'Next vertex or [Close / Undo / Enter]' : 'Specify first vertex';
             case 'spline': return n ? 'Next control point or Enter to finish' : 'Specify first control point';
@@ -1235,6 +1243,8 @@
             case 'dim-angular': if ((t.params.lineIds || []).length === 2) return 'Specify arc radius position'; return ['Specify angle vertex', 'Specify first ray point', 'Specify second ray point', 'Specify arc radius position'][n] || '';
             case 'centerline': return n ? 'Specify second axis point' : 'Specify first axis point';
             case 'centermark': if (t.params.circleId) return 'Click to place center mark on selected circle'; return n ? 'Specify point on circle (radius)' : 'Specify center point';
+            case 'dim-radius':
+            case 'dim-diameter': return 'Specify label position';
             case 'measure': return n ? 'Specify second measurement point' : 'Specify first measurement point';
             case 'move':
             case 'copy': return n ? 'Specify destination or @dx,dy,dz' : 'Specify base point';
@@ -1606,6 +1616,19 @@
                     this.invalidate();
                     return;
                 }
+                if (id === 'dim-radius' || id === 'dim-diameter') {
+                    const wantArc = id === 'dim-radius';
+                    if (!hit || (hit.e.type !== 'CIRCLE' && !(wantArc && hit.e.type === 'ARC')))
+                        throw Error(wantArc ? 'Select a circle or arc for radius.' : 'Select a circle for diameter.');
+                    t.params.circleId = hit.e.id;
+                    this.doc.selection = new Set([hit.e.id]);
+                    this.selectionChanged();
+                    t.stage = 'points';
+                    this.log(id.toUpperCase(), 'Circle selected. Specify label position.');
+                    this.updateToolPrompt();
+                    this.invalidate();
+                    return;
+                }
                 if (!hit)
                     throw Error('No eligible editable object at that point.');
                 if (id === 'hatch' || id === 'extrude') {
@@ -1839,6 +1862,12 @@
                     this.cancel(false);
                 }
             }
+            else if (id === 'dim-radius' || id === 'dim-diameter') {
+                const kind = id === 'dim-radius' ? 'radius' : 'diameter';
+                const pts = this.dimRadialPoints(t.params.circleId, p);
+                this.create({ type: 'DIMENSION', kind, points: pts, anchors: [{ entity: t.params.circleId, kind: 'center' }], textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision, layer: this.doc.layerMap.has('dimensions') ? 'dimensions' : this.doc.currentLayer }, id === 'dim-radius' ? 'Radius dimension' : 'Diameter dimension');
+                this.cancel(false);
+            }
             else if (id === 'measure') {
                 if (!n)
                     t.points.push(p.slice());
@@ -1897,6 +1926,19 @@
             if (Math.atan2(u[0] * w[1] - u[1] * w[0], u[0] * w[0] + u[1] * w[1]) < 0)
                 [r1, r2] = [r2, r1];
             return [v, r1, r2];
+        }
+        dimRadialPoints(circleId, p) {
+            const src = this.doc.byId.get(circleId);
+            if (!src || (src.type !== 'CIRCLE' && src.type !== 'ARC'))
+                throw Error('Select a circle or arc first.');
+            const r = V.len(G.conicAxes(src).x);
+            if (!(r > EPS))
+                throw Error('Circle radius must be positive.');
+            const d = V.sub(p, src.center);
+            if (V.len(d) < EPS)
+                throw Error('Label position must be away from the center.');
+            const c = src.center.slice();
+            return [c, V.add(c, V.mul(V.norm(d), r))];
         }
         offsetSide(e, p) { if (e.center)
             return V.dist(e.center, p) > V.len(G.conicAxes(e).x) ? 1 : -1; if (e.type === 'POLYLINE' && e.closed)
@@ -2185,6 +2227,14 @@
                 }
                 if (t.id === 'offset' && t.source)
                     return [G.offset(t.source, t.params.distance * this.offsetSide(t.source, p))];
+                if (t.id === 'dim-angular' && (t.params.lineIds || []).length === 2) {
+                    const pts = this.angularPointsFromLines(t.params.lineIds[0], t.params.lineIds[1], t.params.pickPoints?.[0], t.params.pickPoints?.[1]);
+                    return [{ type: 'DIMENSION', kind: 'angular', points: pts, offset: Math.max(1e-6, V.dist(pts[0], p)), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
+                }
+                if ((t.id === 'dim-radius' || t.id === 'dim-diameter') && t.params.circleId) {
+                    const pts = this.dimRadialPoints(t.params.circleId, p);
+                    return [{ type: 'DIMENSION', kind: t.id === 'dim-radius' ? 'radius' : 'diameter', points: pts, textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
+                }
                 if (!n)
                     return [];
                 const a = t.points[0], last = t.points.at(-1);
@@ -2225,10 +2275,6 @@
                     return [{ type: 'DIMENSION', kind: 'linear', measureAxis: axis, points: t.points, offset: V.dot(V.sub(p, a), side), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
                 }
                 if (t.id === 'dim-angular') {
-                    if ((t.params.lineIds || []).length === 2) {
-                        const pts = this.angularPointsFromLines(t.params.lineIds[0], t.params.lineIds[1], t.params.pickPoints?.[0], t.params.pickPoints?.[1]);
-                        return [{ type: 'DIMENSION', kind: 'angular', points: pts, offset: Math.max(1e-6, V.dist(pts[0], p)), textHeight: this.defaults.dimensionHeight, precision: this.defaults.precision }];
-                    }
                     if (n === 1)
                         return [{ type: 'LINE', points: [a, p] }];
                     if (n === 2)
@@ -2296,6 +2342,8 @@
                 case 'dim-vertical':
                 case 'dim-horizontal':
                 case 'dim-angular':
+                case 'dim-radius':
+                case 'dim-diameter':
                 case 'centerline':
                 case 'centermark':
                     if (n < (t.id === 'dim-angular' ? 3 : t.id === 'dimension' || t.id === 'dim-vertical' || t.id === 'dim-horizontal' ? 2 : 1))

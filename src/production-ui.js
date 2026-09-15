@@ -83,6 +83,7 @@
             case 'dimstyles':this.dialog({title:'Dimension styles',wide:true,html:jsonField('styles',p.dimstyles,'Named styles (textHeight, precision, scale, prefix, suffix)'),onSubmit:f=>{doc.transaction('Dimension styles',()=>{p.dimstyles=JSON.parse(f.styles);});}});break;
             case 'dim-linear':case 'dim-radius':case 'dim-diameter':case 'dim-angular':case 'dim-ordinate':{
                 if(id==='dim-angular'&&(!selected.length||selected.some(e=>e.type==='LINE'))){ await originalRun.call(this,id); break; }
+                if((id==='dim-radius'||id==='dim-diameter')&&!selected.some(e=>e.type==='CIRCLE'||e.type==='ARC')){ await originalRun.call(this,id); break; }
                 const kind=id.slice(4),e=selected[0],defaultPoints=e?.points?.slice(0,2)||[[0,0,0],[100,50,0]];
                 this.dialog({title:U.get(id).label,html:`<div class="form-grid">${select('style','Style',p.dimstyles.map(s=>[s.name,s.name]))}${field('a',kind==='angular'?'Vertex XYZ':'Origin / first XYZ',defaultPoints[0].join(','),'text')}${field('b','Second point XYZ',defaultPoints[1]?.join(',')||'100,50,0','text')}${kind==='angular'?field('c','Third point XYZ','0,100,0','text'):''}${field('offset','Offset / angular radius',20)}${kind==='linear'||kind==='ordinate'?select('axis','Axis',[['x','X'],['y','Y']]):''}<label class="form-check"><input type="checkbox" name="associate" checked>Associate selected line endpoints (linear dimensions)</label></div>`,onSubmit:f=>{
                     let points=[xyz(f.a),xyz(f.b)],anchors;

@@ -192,8 +192,19 @@
         for (const e of doc.entities) if (e.anchors?.length) {
             let broken = false;
             const p = e.anchors.map(a => { const source = doc.byId.get(a.entity), value = a.kind === 'center' ? source?.center : source?.points?.[a.index]; if (!value) broken = true; return value && value.slice(); });
+            const radial = e.type === 'DIMENSION' && (e.kind === 'radius' || e.kind === 'diameter') && e.anchors.length === 1 && e.anchors[0].kind === 'center';
+            if (!broken && radial) {
+                // Rim point is derived, not stored: keep the label direction, follow center and radius.
+                const src = doc.byId.get(e.anchors[0].entity);
+                const r = (src && (src.type === 'CIRCLE' || src.type === 'ARC')) ? V.len(G.conicAxes(src).x) : NaN;
+                if (!src || !(r > EPS)) broken = true;
+                else {
+                    const dir = V.sub(e.points[1], e.points[0]), dl = V.len(dir), c = src.center.slice();
+                    e.points = [c, V.add(c, V.mul(dl > EPS ? V.mul(dir, 1 / dl) : [1, 0, 0], r))];
+                }
+            }
             e.associationBroken = broken;
-            if (!broken && (e.type === 'DIMENSION' || ((e.type === 'LINE' || e.type === 'POLYLINE') && e.anchors.length === e.points.length))) e.points = p;
+            if (!broken && !radial && (e.type === 'DIMENSION' || ((e.type === 'LINE' || e.type === 'POLYLINE') && e.anchors.length === e.points.length))) e.points = p;
         }
         for (const e of doc.entities) if (e.type === 'HATCH' && e.boundaryIds?.length) {
             const sources = e.boundaryIds.map(id => doc.byId.get(id)); e.associationBroken = sources.some(s => !s || !G.closed(s));
