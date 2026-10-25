@@ -116,6 +116,13 @@
   const out={segments:state.segments,advance:state.p.slice()};if((font.cachedSegments||0)+out.segments.length>limits.segments){font.cache.clear();font.cachedSegments=0;}font.cachedSegments=(font.cachedSegments||0)+out.segments.length;font.cache.set(cacheKey,out);return out;
  }
  function defaults(){return [{name:'STANDARD',font:'',height:0,width:1,oblique:0,backwards:false,upsideDown:false,vertical:false}];}
+ // Unregistered stroke-font references (AutoCAD-compatible SHX names written by
+ // other CAD packages, e.g. IronCAD/Inventor exports) substitute the closest
+ // system family so text stays readable instead of drawing crossed-box
+ // placeholders on every glyph. FONTREPORT still lists the missing font.
+ const SUBSTITUTION_KINDS={txt:'sans',simplex:'sans',simplexs:'sans',complex:'sans',complexs:'sans',monotxt:'sans',greeks:'sans',greekc:'sans',sanss:'sans',sansb:'sans',txt0:'sans',txt1:'sans',txt2:'sans',isocp:'sans',isocp2:'sans',isocp3:'sans',iso30981:'sans',isocpeur:'sans',isocpeurt:'sans',s85:'sans',romans:'serif',romant:'serif',romand:'serif',romb:'serif',serifs:'serif',serifb:'serif',times:'serif',script:'script',scriptc:'script',scriptsc:'script',gothice:'gothic',gothicg:'gothic',gothiceast:'gothic',cyrbig:'sans',cyrfast:'sans'};
+ const SUBSTITUTION_FAMILIES={sans:'"Segoe UI",Arial,Helvetica,sans-serif',serif:'"Times New Roman",Georgia,serif',script:'"Segoe Script","Comic Sans MS",cursive',gothic:'"Old English Text MT","Blackadder ITC",cursive'};
+ function substitutionFamily(fontName){return SUBSTITUTION_FAMILIES[SUBSTITUTION_KINDS[String(fontName||'').replace(/\.[^.]+$/,'').toLowerCase()]]||'"Segoe UI",Arial,sans-serif';}
  function styles(doc){return doc?.production?.textstyles||defaults();}
  function style(doc,name='STANDARD'){return styles(doc).find(s=>s.name.toLowerCase()===String(name).toLowerCase())||defaults()[0];}
  function properties(t,doc){const s=style(doc,t.textStyle);return {...t,textStyle:t.textStyle||s.name,font:t.font??s.font??'',widthFactor:t.widthFactor??s.width??1,oblique:t.oblique??s.oblique??0,backwards:t.backwards??!!s.backwards,upsideDown:t.upsideDown??!!s.upsideDown,vertical:t.vertical??!!s.vertical,lineSpacing:t.lineSpacing??1.35};}
@@ -140,13 +147,13 @@
  }
  let context;
  function metrics(text,font,options={}){if(typeof document!=='undefined'&&!context)context=document.createElement('canvas').getContext('2d');const family=font?.family||'"Segoe UI",Arial,sans-serif';if(!context)return {width:text.length*.66,cap:1,em:1,family};context.font=(options.italic?'italic ':'')+(options.bold?'bold ':'')+'1000px '+family;context.direction=options.textDirection||'ltr';if('letterSpacing' in context)context.letterSpacing='0px';const cap=context.measureText('H').actualBoundingBoxAscent||730;if('letterSpacing' in context)context.letterSpacing=((options.tracking??1)-1)*.2*cap+'px';return {width:context.measureText(text).width/cap,cap:1,em:1000/cap,family};}
- function layout(input,doc){const t=properties(input,doc),font=registry.get(key(t.font))||registry.get(key(t.font)+'.shx'),stroke=font?.kind==='stroke',missing=!!t.font&&!font,placeholder=missing&&(/\.(shx|shp)$/i.test(t.font)||!key(t.font).includes('.')),h=t.height||10,axes=G.textAxes(t),width=t.widthFactor*(t.backwards?-1:1),ys=t.upsideDown?-1:1,slant=Math.tan(t.oblique*Math.PI/180),warnings=new Set(),segments=[],points=[],texts=[];
+ function layout(input,doc){const t=properties(input,doc),font=registry.get(key(t.font))||registry.get(key(t.font)+'.shx'),stroke=font?.kind==='stroke',missing=!!t.font&&!font,substitute=missing?substitutionFamily(t.font):null,h=t.height||10,axes=G.textAxes(t),width=t.widthFactor*(t.backwards?-1:1),ys=t.upsideDown?-1:1,slant=Math.tan(t.oblique*Math.PI/180),warnings=new Set(),segments=[],points=[],texts=[];
   const transform=p=>V.add(t.position,V.add(V.mul(axes.x,h*width*(p[0]+slant*p[1])),V.mul(axes.y,h*ys*p[1])));
-  if(input.textStyle&&!styles(doc).some(s=>s.name.toLowerCase()===input.textStyle.toLowerCase()))warnings.add('Missing text style: '+input.textStyle);if(style(doc,input.textStyle).bigFont)warnings.add('Big Font dependency is not supported: '+style(doc,input.textStyle).bigFont);if(missing)warnings.add('Missing font: '+t.font);if(t.vertical&&stroke&&font.mode!==2)warnings.add('Font does not support vertical writing: '+t.font);
+  if(input.textStyle&&!styles(doc).some(s=>s.name.toLowerCase()===input.textStyle.toLowerCase()))warnings.add('Missing text style: '+input.textStyle);if(style(doc,input.textStyle).bigFont)warnings.add('Big Font dependency is not supported: '+style(doc,input.textStyle).bigFont);if(missing)warnings.add('Missing font: '+t.font+' — displaying with the substituted system font.');if(t.vertical&&stroke&&font.mode!==2)warnings.add('Font does not support vertical writing: '+t.font);
   const lines=String(t.text||'').split('\n');let count=0;
   for(let lineIndex=0;lineIndex<lines.length;lineIndex++){const line=lines[lineIndex],local=[],vertices=[];let x=0,y=0;
-   if(stroke||placeholder){for(const ch of line){const code=ch.codePointAt(0);let g;try{g=stroke?glyph(font,code,t.vertical):null;}catch(error){warnings.add(error.message);g=null;}const actual=!!g;
-     if(!g){if(!placeholder)warnings.add('Missing glyph U+'+code.toString(16).toUpperCase()+' in '+t.font);g={segments:ch===' '?[]:[[[0,0],[.6,0]],[[.6,0],[.6,1]],[[.6,1],[0,1]],[[0,1],[0,0]],[[0,0],[.6,1]]],advance:t.vertical?[0,-1.35]:[.8,0]};}
+   if(stroke){for(const ch of line){const code=ch.codePointAt(0);let g;try{g=stroke?glyph(font,code,t.vertical):null;}catch(error){warnings.add(error.message);g=null;}const actual=!!g;
+     if(!g){warnings.add('Missing glyph U+'+code.toString(16).toUpperCase()+' in '+t.font);g={segments:ch===' '?[]:[[[0,0],[.6,0]],[[.6,0],[.6,1]],[[.6,1],[0,1]],[[0,1],[0,0]],[[0,0],[.6,1]]],advance:t.vertical?[0,-1.35]:[.8,0]};}
      const unit=actual?1/font.above:1;
      for(const pair of g.segments){if(++count>limits.segments)throw Error('Text stroke segment limit exceeded.');local.push(pair.map(p=>[x+p[0]*unit,y+p[1]*unit]));}
      x+=g.advance[0]*unit+((t.tracking??1)-1)*.2;y=t.vertical?y+g.advance[1]*unit:0;
@@ -154,7 +161,7 @@
     const dx=t.align==='center'?-x/2:t.align==='right'?-x:0,dy=t.vertical?0:-lineIndex*t.lineSpacing;
     for(const pair of local)segments.push(pair.map(p=>transform([p[0]+dx+(t.vertical?lineIndex*t.lineSpacing:0),p[1]+dy])));
     const descent=stroke?font.below/font.above:.25;for(const xx of [dx,dx+x])for(const yy of [dy+y-descent,dy+1])vertices.push([xx+(t.vertical?lineIndex*t.lineSpacing:0),yy]);
-   }else{const m=metrics(line,font,t),dx=t.align==='center'?-m.width/2:t.align==='right'?-m.width:0,dy=-lineIndex*t.lineSpacing;
+   }else{const m=metrics(line,substitute?{family:substitute}:font,t),dx=t.align==='center'?-m.width/2:t.align==='right'?-m.width:0,dy=-lineIndex*t.lineSpacing;
     if(t.vertical)warnings.add('Vertical outline text is stacked, not a SHX dual-orientation layout.');
     if(t.vertical){let index=0;for(const ch of line){const cm=metrics(ch,font,t);texts.push({...t,text:ch,position:transform([lineIndex*t.lineSpacing,-index*t.lineSpacing]),fontFamily:m.family,exportFamily:font?.exportFamily,fontEm:m.em,align:'center',vertical:false,fontMissing:missing});index++;}for(const xx of [-.6,.6])for(const yy of [-line.length*t.lineSpacing,1])vertices.push([xx+lineIndex*t.lineSpacing,yy]);}
     else{const resolved={...t,text:line,position:V.add(t.position,V.add(V.mul(axes.x,h*width*slant*dy),V.mul(axes.y,h*ys*dy))),fontFamily:m.family,exportFamily:font?.exportFamily,fontEm:m.em,fontMissing:missing,vertical:false};texts.push(resolved);for(const xx of [dx,dx+m.width])for(const yy of [dy-.25,dy+1])vertices.push([xx,yy]);}
@@ -166,7 +173,7 @@
  function resource(name){return registry.get(key(name))||registry.get(key(name)+'.shx');}
  function measure(text,input={},doc){const t=properties(input,doc),font=resource(t.font),h=t.height||1;let width=0;
   if(font?.kind==='stroke'){for(const ch of String(text)){const g=glyph(font,ch.codePointAt(0));width+=(g?g.advance[0]/font.above:.8)+((t.tracking??1)-1)*.2;}}
-  else if(t.font&&(/\.(shx|shp)$/i.test(t.font)||!key(t.font).includes('.'))&&!font)width=Array.from(text).length*.8;
+  else if(t.font&&(/\.(shx|shp)$/i.test(t.font)||!key(t.font).includes('.'))&&!font)width=metrics(text,{family:substitutionFamily(t.font)},t).width;
   else width=metrics(text,font,t).width;
   return {width:Math.max(0,width*h*(t.widthFactor??1)),font};
  }
@@ -189,5 +196,5 @@
  G.geometry=function(e,tolerance){const g=originalGeometry(e,tolerance);if(!g.texts?.length)return g;const doc=K.Production.owners.get(e),out={...g,segments:g.segments.slice(),texts:[],points:[...g.segments.flat(),...g.triangles.flatMap(t=>t.points)]};
   for(const t of g.texts){if(t.composition){out.texts.push(t);out.points.push(...t.composition.quads.flat());continue;}const r=layout({...t,textStyle:t.textStyle||e.textStyle},doc);out.segments.push(...r.segments);out.texts.push(...r.texts);out.points.push(...r.points);}return out;};
  const oldValidate=K.Production.validate;K.Production.validate=function(data){oldValidate(data);validate(data);};
- K.Fonts={resource,measure,limits,parseSHX,parseSHP,outlineFamily,glyph,register,load,registry,defaults,styles,style,properties,validate,layout,report,svgText,drawText,subscribe:fn=>{subscribers.add(fn);return()=>subscribers.delete(fn);}};
+ K.Fonts={resource,measure,limits,parseSHX,parseSHP,outlineFamily,glyph,register,load,registry,defaults,styles,style,properties,validate,layout,report,svgText,drawText,substitutionFamily,subscribe:fn=>{subscribers.add(fn);return()=>subscribers.delete(fn);}};
 })(typeof window!=='undefined'?window:globalThis);

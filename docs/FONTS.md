@@ -25,9 +25,11 @@ the resource and invalidates cached text geometry. Keep the exact original font 
 and honor their licenses. The font loader does not search the operating system.
 
 `FONTREPORT` shows unresolved resources and glyphs in visible annotations. Missing
-stroke fonts/glyphs use visible crossed-box placeholders, not invented lookalike
-characters. Missing outline fonts use the explicitly reported browser fallback.
-Big Font dependencies are retained as references but are not implemented.
+stroke fonts substitute the closest available system family (sans-serif, serif or
+script selected from the style's font name) so imported text stays readable; the
+report lists every substituted dependency. Individual glyphs that a loaded stroke
+font cannot draw use visible crossed-box placeholders, not invented lookalike
+characters. Big Font dependencies are retained as references but are not implemented.
 
 ## Stroke fonts
 

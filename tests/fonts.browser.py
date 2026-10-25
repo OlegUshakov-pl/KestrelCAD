@@ -48,8 +48,9 @@ with sync_playwright() as p:
     test('Text ribbon creates persisted current text style',setup)
     def missing():
         action('font-report');assert 'Missing font' in page.locator('#modal').inner_text();close()
-        assert ev('kestrel.doc.geometry(kestrel.doc.entities[0]).segments.length')==10
-    test('missing SHX font is explicit and produces placeholders',missing)
+        g=ev('(()=>{const g=kestrel.doc.geometry(kestrel.doc.entities[0]);return {segments:g.segments.length,texts:g.texts.length,family:g.texts[0]?.fontFamily||""}})()')
+        assert g['segments']==0 and g['texts']==1 and 'Segoe' in g['family']
+    test('missing SHX font is reported and stays readable via system-font substitution',missing)
     def load(name,buffer):
         with page.expect_file_chooser() as chooser:action('font-load')
         chooser.value.set_files({'name':name,'mimeType':'application/octet-stream','buffer':buffer})
