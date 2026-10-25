@@ -23,7 +23,7 @@
             this.camera = new K.Camera();
             this.renderer = new K.Renderer($('scene'), $('overlay'), this.camera);
             this.index = new K.SpatialIndex();
-            this.settings = { grid: true, snap: false, osnap: true, ortho: false, polar: false, lineweights: false, snapSpacing: 100, polarAngle: 15 };
+            this.settings = { grid: true, snap: false, osnap: true, ortho: false, polar: false, lineweights: false, snapSpacing: 100, polarAngle: 15, saveDialog: true };
             this.defaults = { color: 'bylayer', customColor: '#5ac6d2', lineweight: 0, textHeight: 160, dimensionHeight: 10, precision: 2 };
             this.theme = 'dark';
             this.workspace = '2d';
@@ -297,8 +297,8 @@
             } });
             document.addEventListener('dragleave', e => { if (!e.relatedTarget)
                 $('drop-zone').hidden = true; });
-            document.addEventListener('drop', e => { e.preventDefault(); $('drop-zone').hidden = true; const f = e.dataTransfer?.files[0]; if (f)
-                this.openFile(f, 'open').catch(x => this.fail(x)); });
+            document.addEventListener('drop', e => { e.preventDefault(); $('drop-zone').hidden = true; const item = e.dataTransfer?.items[0], f = e.dataTransfer?.files[0]; if (!f)
+                return; Promise.resolve(item?.getAsFileSystemHandle?.()).then(handle => this.openFile(f, 'open', handle)).catch(x => this.fail(x)); });
             for (const el of document.querySelectorAll('.panel-resizer,#command-resizer')) {
                 el.addEventListener('pointerdown', e => { e.preventDefault(); const isCommand = el.id === 'command-resizer', isLeft = el.classList.contains('left-resizer'), x = e.clientX, y = e.clientY, initial = isCommand ? $('command-dock').offsetHeight : isLeft ? $('explorer').offsetWidth : $('properties').offsetWidth; el.setPointerCapture(e.pointerId); const move = ev => { const v = isCommand ? clamp(initial + y - ev.clientY, 60, window.innerHeight * .4) : clamp(initial + (isLeft ? 1 : -1) * (ev.clientX - x), 170, 390); document.documentElement.style.setProperty(isCommand ? '--command-height' : isLeft ? '--left-width' : '--right-width', v + 'px'); }; const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); }; el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); });
             }
@@ -749,11 +749,25 @@
                 }
                 case 'open':
                 case 'insert':
+                    if (id === 'open' && window.isSecureContext && typeof window.showOpenFilePicker === 'function') {
+                        try {
+                            const [handle] = await window.showOpenFilePicker({ multiple: false, types: [{ description: 'CAD drawings', accept: { 'application/dxf': ['.dxf'], 'application/json': ['.kcad', '.json'], 'application/octet-stream': ['.dwg', '.kst'] } }] });
+                            this.openFile(await handle.getFile(), 'open', handle).catch(x => this.fail(x));
+                            break;
+                        }
+                        catch (error) {
+                            if (error?.name !== 'SecurityError' && error?.name !== 'NotAllowedError') {
+                                if (error?.name === 'AbortError')
+                                    break;
+                                throw error;
+                            }
+                        }
+                    }
                     this.importMode = id;
                     $('file-input').click();
                     break;
                 case 'save':
-                    this.saveNative();
+                    await this.saveNative();
                     break;
                 case 'export-dxf':
                     await this.exportDXF();
@@ -2820,8 +2834,8 @@
         newLayerDialog() { this.dialog({ title: 'Create layer', html: `<div class="form-grid">${this.field('name', 'Layer name', 'New layer', 'text', 'maxlength="255" required')}${this.field('color', 'Layer color', '#5ac6d2', 'color')}</div>`, submit: 'Create layer', onSubmit: f => { const name = f.name.trim(); if (!name)
                 throw Error('A layer name is required.'); if (this.doc.layers.some(l => l.name.toLowerCase() === name.toLowerCase()))
                 throw Error('A layer with this name already exists.'); this.doc.transaction('Create layer', () => { const l = this.doc.addLayer(name, f.color); this.doc.currentLayer = l.id; }); } }); }
-        unitsDialog() { this.dialog({ title: 'Drawing units & precision', html: `<p>Coordinates are stored in drawing units. Changing metadata does not rescale existing geometry unless conversion is selected.</p><div class="form-grid"><div class="form-field"><label>Drawing units</label><select name="units">${Object.entries(UNIT_LABELS).map(([id, label]) => `<option value="${id}" ${this.doc.units === id ? 'selected' : ''}>${label}</option>`).join('')}</select></div>${this.field('precision', 'Dimension decimal places', this.defaults.precision, 'number', 'min="0" max="6"')}${this.field('spacing', 'Grid snap spacing', this.settings.snapSpacing, 'number', 'min="0.000001"')}${this.field('text', 'Text height', this.defaults.textHeight, 'number', 'min="0.000001"')}${this.field('dim', 'Dimension text height', this.defaults.dimensionHeight, 'number', 'min="0.000001"')}${this.field('polar', 'Polar tracking increment (degrees)', this.settings.polarAngle, 'number', 'min="1" max="90"')}<label class="form-check form-field full"><input type="checkbox" name="convert">Convert all existing coordinates to the new units</label></div>`, submit: 'Apply units', onSubmit: f => { const factor = f.convert ? UNIT_MM[this.doc.units] / UNIT_MM[f.units] : 1; const values = { snapSpacing: positive(f.spacing), textHeight: positive(f.text), dimensionHeight: positive(f.dim), precision: Math.round(finite(f.precision, 'Precision', 0, 6)), polarAngle: finite(f.polar, 'Polar angle', 1, 90) }; this.doc.transaction('Change drawing units', () => { K.Constraints?.convertUnits(this.doc,f.units,factor,!!f.convert); K.SpatialConstraints?.convertUnits(this.doc,f.units,factor,!!f.convert); if (factor !== 1)
-                this.doc.entities = this.doc.entities.map(e => G.transform(e, M.scale(factor))); this.doc.units = f.units; }); Object.assign(this.defaults, { textHeight: values.textHeight, dimensionHeight: values.dimensionHeight, precision: values.precision }); Object.assign(this.settings, { snapSpacing: values.snapSpacing, polarAngle: values.polarAngle }); this.savePreferences(); if (factor !== 1)
+        unitsDialog() { this.dialog({ title: 'Drawing units & precision', html: `<p>Coordinates are stored in drawing units. Changing metadata does not rescale existing geometry unless conversion is selected.</p><div class="form-grid"><div class="form-field"><label>Drawing units</label><select name="units">${Object.entries(UNIT_LABELS).map(([id, label]) => `<option value="${id}" ${this.doc.units === id ? 'selected' : ''}>${label}</option>`).join('')}</select></div>${this.field('precision', 'Dimension decimal places', this.defaults.precision, 'number', 'min="0" max="6"')}${this.field('spacing', 'Grid snap spacing', this.settings.snapSpacing, 'number', 'min="0.000001"')}${this.field('text', 'Text height', this.defaults.textHeight, 'number', 'min="0.000001"')}${this.field('dim', 'Dimension text height', this.defaults.dimensionHeight, 'number', 'min="0.000001"')}${this.field('polar', 'Polar tracking increment (degrees)', this.settings.polarAngle, 'number', 'min="1" max="90"')}<label class="form-check form-field full"><input type="checkbox" name="convert">Convert all existing coordinates to the new units</label><label class="form-check form-field full"><input type="checkbox" name="saveDialog" ${this.settings.saveDialog !== false ? 'checked' : ''}>Show the system save dialog for exports (off: files go to the browser download folder)</label></div>`, submit: 'Apply units', onSubmit: f => { const factor = f.convert ? UNIT_MM[this.doc.units] / UNIT_MM[f.units] : 1; const values = { snapSpacing: positive(f.spacing), textHeight: positive(f.text), dimensionHeight: positive(f.dim), precision: Math.round(finite(f.precision, 'Precision', 0, 6)), polarAngle: finite(f.polar, 'Polar angle', 1, 90) }; this.doc.transaction('Change drawing units', () => { K.Constraints?.convertUnits(this.doc,f.units,factor,!!f.convert); K.SpatialConstraints?.convertUnits(this.doc,f.units,factor,!!f.convert); if (factor !== 1)
+                this.doc.entities = this.doc.entities.map(e => G.transform(e, M.scale(factor))); this.doc.units = f.units; }); Object.assign(this.defaults, { textHeight: values.textHeight, dimensionHeight: values.dimensionHeight, precision: values.precision }); Object.assign(this.settings, { snapSpacing: values.snapSpacing, polarAngle: values.polarAngle, saveDialog: !!f.saveDialog }); this.savePreferences(); if (factor !== 1)
                 this.fit(); this.refresh(); } }); }
         filterDialog() { const types = [...new Set(this.doc.entities.map(e => e.type))].sort(); this.dialog({ title: 'Select by filter', html: `<div class="form-grid"><div class="form-field"><label>Entity type</label><select name="type"><option value="">All types</option>${types.map(t => `<option>${t}</option>`).join('')}</select></div><div class="form-field"><label>Layer</label><select name="layer"><option value="">All layers</option>${this.doc.layers.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></div><label class="form-check form-field full"><input type="checkbox" name="add">Add to the existing selection</label></div><div class="dialog-note">Hidden and locked entities are excluded.</div>`, submit: 'Select matching objects', onSubmit: f => { if (!f.add)
                 this.doc.selection.clear(); for (const e of this.doc.entities)
@@ -2864,9 +2878,55 @@
             return Promise.resolve().then(() => action === 'parse-dxf' ? K.Exchange.parseDXF(payload, name) : action === 'preserve-dxf' ? K.SourceDocument.exportPreserved(payload) : action === 'binary-dxf' ? K.SourceDocument.toBinary(K.Exchange.writeDXF(payload)) : K.Exchange.writeDXF(payload)); return new Promise((resolve, reject) => { const id = ++this.ioSequence, timer = setTimeout(() => { this.pendingIO.delete(id); reject(Error('File processing exceeded its 90-second safety limit.')); }, 90000); this.pendingIO.set(id, { resolve, reject, timer }); this.worker.postMessage({ id, action, payload, name }, payload instanceof ArrayBuffer ? [payload] : []); }); }
         filename(extension) { return (this.doc.name || 'Drawing').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 120) + '.' + extension; }
         download(content, name, type = 'application/octet-stream') { const blob = content instanceof Blob ? content : new Blob([content], { type }), url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
-        saveNative() { this.doc.camera = this.camera.serialize(); this.download(JSON.stringify(this.doc.serialize(), null, 2), this.filename('kcad'), 'application/json'); this.doc.dirty = false; this.refreshTabs(); this.autosave(); this.toast('Editable project downloaded.'); }
-        async exportDXF() { this.log('DXF', 'Writing supported entities to ASCII DXF…'); const text = await this.io('write-dxf', this.doc.serialize()); this.download(text, this.filename('dxf'), 'application/dxf'); this.log('DXF', 'Exported ' + this.doc.entities.length + ' native entities; meshes are faceted 3DFACEs.'); this.toast('DXF exported. Meshes are faceted; unsupported application metadata is not included.'); }
-        async openFile(file, mode = 'open') { if (file.size > (/\.(kcad|json)$/i.test(file.name) ? 256 : 64) * 1024 * 1024)
+        pickerSupported() { return typeof window.showSaveFilePicker === 'function' && window.isSecureContext; }
+        async writeHandle(handle, content, type) { const writable = await handle.createWritable(); await writable.write(content instanceof Blob ? content : new Blob([content], { type })); await writable.close(); }
+        // Saving with the File System Access API opens the browser folder-choice
+        // dialog (defaulting to the folder the drawing was opened from); if the
+        // API is unavailable, not permitted, called without a user gesture or
+        // the saveDialog setting is off, the plain download fallback applies.
+        async writeOut(content, name, type = 'application/octet-stream', silentOverwrite = false) {
+            if (this.pickerSupported() && this.settings.saveDialog !== false && !navigator.webdriver) {
+                try {
+                    const ext = name.includes('.') ? '.' + name.split('.').pop().toLowerCase() : '';
+                    if (silentOverwrite && this.doc.fileHandle && ext && (this.doc.fileHandle.name || '').toLowerCase().endsWith(ext)) {
+                        await this.writeHandle(this.doc.fileHandle, content, type);
+                        return { handle: this.doc.fileHandle, reused: true };
+                    }
+                    const handle = await window.showSaveFilePicker({ suggestedName: name, startIn: this.doc.fileHandle ?? undefined, ...(ext && { types: [{ description: ext.slice(1).toUpperCase() + ' file', accept: { [type]: [ext] } }] }) });
+                    await this.writeHandle(handle, content, type);
+                    return { handle, reused: false };
+                }
+                catch (error) {
+                    if (error?.name === 'AbortError')
+                        return null;
+                    if (error?.name !== 'SecurityError' && error?.name !== 'NotAllowedError')
+                        throw error;
+                }
+            }
+            this.download(content, name, type);
+            return { handle: null, reused: false, fallback: true };
+        }
+        async saveNative() {
+            this.doc.camera = this.camera.serialize();
+            const saved = await this.writeOut(JSON.stringify(this.doc.serialize(), null, 2), this.filename('kcad'), 'application/json', true);
+            if (!saved)
+                return;
+            if (!saved.reused && !saved.fallback)
+                this.doc.fileHandle = saved.handle;
+            this.doc.dirty = false; this.refreshTabs(); this.autosave();
+            this.toast(saved.reused ? 'Project saved in place.' : saved.fallback ? 'Editable project downloaded.' : 'Project saved.');
+            this.log('Save', saved.reused ? 'Wrote the project back to the opened file: ' + saved.handle.name + '.' : saved.fallback ? 'Browser download used (no file-system access in this context).' : 'Project written to ' + saved.handle.name + '.');
+        }
+        async exportDXF() {
+            this.log('DXF', 'Writing supported entities to ASCII DXF…');
+            const text = await this.io('write-dxf', this.doc.serialize());
+            const saved = await this.writeOut(text, this.filename('dxf'), 'application/dxf');
+            if (!saved)
+                return;
+            this.log('DXF', 'Exported ' + this.doc.entities.length + ' native entities; meshes are faceted 3DFACEs.');
+            this.toast(saved.fallback ? 'DXF downloaded to the browser download folder.' : 'DXF saved. Meshes are faceted; unsupported application metadata is not included.');
+        }
+        async openFile(file, mode = 'open', handle = null) { if (file.size > (/\.(kcad|json)$/i.test(file.name) ? 256 : 64) * 1024 * 1024)
             throw Error('File size exceeds the import limit (64 MiB exchange, 256 MiB archived native project).'); this.cancel(false); const ext = file.name.split('.').at(-1).toLowerCase(), name = file.name.replace(/\.[^.]+$/, ''), target = this.doc; this.log('Open', file.name + ' (' + (file.size / 1024).toFixed(1) + ' KiB)'); let data, report = null; if (ext === 'kcad' || ext === 'json') {
             data = JSON.parse(await file.text());
             K.validateProject(data);
@@ -2893,7 +2953,7 @@
             this.insertData(data);
         }
         else
-            this.addDocument(K.Drawing.from(data)); this.fit(); this.saveSoon(); if (report) {
+            this.addDocument(K.Drawing.from(data)); if (handle && this.doc.fileHandle !== handle) this.doc.fileHandle = handle; this.fit(); this.saveSoon(); if (report) {
             this.lastImportReport = report;
             this.showImportReport(report);
         }
@@ -2918,11 +2978,11 @@
             return ids;
         }
         showImportReport(report) { const skipped = Object.values(report.skipped || {}).reduce((a, b) => a + b, 0), warnings = report.warnings || []; this.log('Import', `${report.created} created · ${skipped} skipped · ${warnings.length} warning(s)`); this.dialog({ title: 'DXF import report', html: `<div class="report-stat-grid"><div class="report-stat"><strong>${report.read.toLocaleString()}</strong><span>Records read</span></div><div class="report-stat"><strong>${report.created.toLocaleString()}</strong><span>Entities created</span></div><div class="report-stat"><strong>${skipped.toLocaleString()}</strong><span>Skipped</span></div></div>${skipped ? `<table class="report-table">${Object.entries(report.skipped).map(([name, count]) => `<tr><td>${esc(name)}</td><td>${count}</td></tr>`).join('')}</table>` : ''}${warnings.length ? warnings.slice(0, 30).map(w => `<div class="dialog-note warning">${esc(w)}</div>`).join('') : '<div class="dialog-note success"><strong>Supported entity data imported</strong>No parser warnings were generated. Always compare critical drawings against the originating CAD application.</div>'}`, submit: 'View drawing', closeOnly: true }); }
-        svgDialog() { this.dialog({ title: 'Export vector SVG', html: `<p>Export the visible drawing using a fitted top view or the current 3D projection.</p><div class="form-grid"><div class="form-field"><label>Projection</label><select name="projection"><option value="top">Top / world XY</option><option value="current">Current view</option></select></div>${this.field('width', 'Output width (pixels)', 1600, 'number', 'min="200" max="20000"')}${this.field('height', 'Output height (pixels)', 1131, 'number', 'min="200" max="20000"')}<label class="form-check"><input type="checkbox" name="monochrome" checked>Monochrome</label><label class="form-check"><input type="checkbox" name="sheet" checked>Include sheet border</label></div>`, submit: 'Export SVG', onSubmit: f => { const svg = K.Exchange.writeSVG(this.doc, { width: finite(f.width, 'Width', 200, 20000), height: finite(f.height, 'Height', 200, 20000), camera: f.projection === 'current' ? this.camera : null, monochrome: !!f.monochrome, sheet: !!f.sheet }); this.download(svg, this.filename('svg'), 'image/svg+xml'); this.toast('Vector drawing exported.'); } }); }
+        svgDialog() { this.dialog({ title: 'Export vector SVG', html: `<p>Export the visible drawing using a fitted top view or the current 3D projection.</p><div class="form-grid"><div class="form-field"><label>Projection</label><select name="projection"><option value="top">Top / world XY</option><option value="current">Current view</option></select></div>${this.field('width', 'Output width (pixels)', 1600, 'number', 'min="200" max="20000"')}${this.field('height', 'Output height (pixels)', 1131, 'number', 'min="200" max="20000"')}<label class="form-check"><input type="checkbox" name="monochrome" checked>Monochrome</label><label class="form-check"><input type="checkbox" name="sheet" checked>Include sheet border</label></div>`, submit: 'Export SVG', onSubmit: async f => { const svg = K.Exchange.writeSVG(this.doc, { width: finite(f.width, 'Width', 200, 20000), height: finite(f.height, 'Height', 200, 20000), camera: f.projection === 'current' ? this.camera : null, monochrome: !!f.monochrome, sheet: !!f.sheet }); const saved = await this.writeOut(svg, this.filename('svg'), 'image/svg+xml'); if (!saved) return; this.toast(saved.fallback ? 'Vector drawing downloaded.' : 'Vector drawing saved.'); } }); }
         exportPNG() { this.pointer.inside = false; requestAnimationFrame(() => { this.renderer.render(this.doc); const canvas = this.renderer.screenshot(); canvas.toBlob(blob => { if (!blob) {
             this.fail(Error('Image export failed.'));
             return;
-        } this.download(blob, this.filename('png'), 'image/png'); this.toast('Viewport PNG exported.'); }, 'image/png'); }); }
+        } this.writeOut(blob, this.filename('png'), 'image/png').then(saved => { if (saved) this.toast(saved.fallback ? 'Viewport PNG downloaded.' : 'Viewport PNG saved.'); }); }, 'image/png'); }); }
         printDialog() { this.dialog({ title: 'Print / plot', html: `<p>Create a fitted A3 landscape sheet. The browser print dialog can print it or save it as a PDF.</p><div class="form-grid"><div class="form-field"><label>Projection</label><select name="projection"><option value="top">Top / world XY</option><option value="current">Current view</option></select></div><label class="form-check"><input name="monochrome" type="checkbox" checked>Monochrome</label></div><div class="dialog-note">This is fit-to-page output, not an engineering-scale plot. Use DXF for dimensionally accurate downstream CAD plotting.</div>`, submit: 'Open print sheet', onSubmit: f => { const popup = window.open('', '_blank'); if (!popup)
                 throw Error('Allow popups for this local application to open its print sheet.'); const svg = K.Exchange.writeSVG(this.doc, { width: 1680, height: 1188, camera: f.projection === 'current' ? this.camera : null, monochrome: !!f.monochrome, sheet: true }); popup.document.write('<!doctype html><html><head><title>' + esc(this.doc.name) + ' — Kestrel CAD</title><style>@page{size:A3 landscape;margin:0}body{margin:0;background:#ddd}svg{display:block;width:100vw;height:100vh;background:white}button{position:fixed;top:12px;right:12px;padding:10px 20px;cursor:pointer}@media print{button{display:none}body{background:white}svg{width:420mm;height:297mm}}</style></head><body>' + svg + '<button onclick="window.print()">Print / Save PDF</button></body></html>'); popup.document.close(); } }); }
         async getCapabilities() { if (!['http:', 'https:'].includes(location.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname))
@@ -2949,7 +3009,7 @@
         async exportDWG() { const caps = await this.getCapabilities(); if (!caps.dwgWrite) {
             await this.dwgDialog(caps);
             return;
-        } this.dialog({ title: 'Export DWG through local codec', html: `<p>The installed <strong>dxf2dwg</strong> converter will encode an ASCII DXF export as DWG. Meshes remain faceted entities; they do not become ACIS solids.</p><div class="dialog-note warning">Codec writing is experimental in some distributions. This is not a lossless DWG round trip. Verify the result in the destination application.</div>`, submit: 'Convert and export DWG', onSubmit: async () => { const text = await this.io('write-dxf', this.doc.serialize()), response = await this.convert('dxf-to-dwg', text); const blob = await response.blob(); this.download(blob, this.filename('dwg')); this.toast('DWG conversion completed by the local codec.'); } }); }
+        } this.dialog({ title: 'Export DWG through local codec', html: `<p>The installed <strong>dxf2dwg</strong> converter will encode an ASCII DXF export as DWG. Meshes remain faceted entities; they do not become ACIS solids.</p><div class="dialog-note warning">Codec writing is experimental in some distributions. This is not a lossless DWG round trip. Verify the result in the destination application.</div>`, submit: 'Convert and export DWG', onSubmit: async () => { const text = await this.io('write-dxf', this.doc.serialize()), response = await this.convert('dxf-to-dwg', text); const blob = await response.blob(); const saved = await this.writeOut(blob, this.filename('dwg')); if (saved) this.toast('DWG conversion completed by the local codec.'); } }); }
         async dwgDialog(existing = null) { const caps = existing || await this.getCapabilities(); this.dialog({ title: 'DWG codec status', html: `<table class="report-table"><tr><td>Local bridge</td><td>${caps.bridge ? 'Connected' : 'Not connected'}</td></tr><tr><td>DWG → DXF</td><td>${caps.dwgRead ? 'Converter detected' : 'Not installed'}</td></tr><tr><td>DXF → DWG</td><td>${caps.dwgWrite ? 'Converter detected' : 'Not installed'}</td></tr></table><div class="dialog-note ${caps.dwgRead ? 'success' : 'warning'}"><strong>${caps.dwgRead ? 'DWG import converter is available' : 'Native DWG codec is not bundled'}</strong>${esc(caps.reason || 'The bridge invokes separately installed GNU LibreDWG command-line converters. Detection does not certify every DWG version or entity type.')}</div><h3>Local setup</h3><p>From the application folder run <code>python3 tools/serve.py</code>, then open <code>http://localhost:8000</code>. Install GNU LibreDWG separately and ensure <code>dwg2dxf</code> and, for export, <code>dxf2dwg</code> are on PATH. Read the included README before enabling conversion.</p><p>All conversion is local. No drawing is uploaded to a remote conversion service. Without a codec, use DXF exchange or the native .kcad format.</p><div class="dialog-note">DWG version and object support depend on the installed codec and this application's DXF subset. Proprietary extension objects, ACIS solids and application metadata are not preserved.</div>`, submit: 'Close', closeOnly: true }); }
     }
     K.App = App;
