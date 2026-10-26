@@ -182,8 +182,8 @@ with sync_playwright() as p:
         page.locator('#viewport').focus();page.keyboard.press('Control+k');eq(page.locator('#command-palette').evaluate('(e)=>e.open'),True);page.locator('#palette-search').fill('diagnostics');assert page.locator('.palette-item').count()>=1;page.locator('#palette-search').press('Enter');eq(page.locator('#modal-title').inner_text(),'Renderer diagnostics');close_modal()
     test('command palette search and keyboard execution',palette)
     def mirror():
-        fresh();command('L 20,10 40,30 ENTER');select([0]);command('MIRROR 0,0 0,100');near(state('kestrel.doc.entities[0].points[0][0]'),-20);near(state('kestrel.doc.entities[0].points[0][1]'),10)
-    test('mirror reflects actual geometry across the specified axis',mirror)
+        fresh();command('L 20,10 40,30 ENTER');select([0]);command('MIRROR 0,0 0,100');eq(count(),2);near(state('kestrel.doc.entities[0].points[0][0]'),20);near(state('kestrel.doc.entities[0].points[0][1]'),10);near(state('kestrel.doc.entities[1].points[0][0]'),-20);near(state('kestrel.doc.entities[1].points[0][1]'),10)
+    test('mirror copies the geometry and keeps the originals in place',mirror)
     def offset():
         fresh();command('C 0,0 20');select([0]);fit();action('offset');submit({'distance':5});click_world([30,0,0]);page.keyboard.press('Escape');eq(count(),2);near(state('kestrel.doc.entities[1].radius'),25)
     test('offset circle through modal and mouse-side selection',offset)

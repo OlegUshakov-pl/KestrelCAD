@@ -1905,7 +1905,7 @@
                     const mat = this.transformPreview(p);
                     if (!mat)
                         throw Error('The transformation is degenerate.');
-                    this.doc.transaction(id[0].toUpperCase() + id.slice(1), () => this.doc.transform(t.selectedIds, mat, id === 'copy'));
+                    this.doc.transaction(id[0].toUpperCase() + id.slice(1), () => this.doc.transform(t.selectedIds, mat, id === 'copy' || id === 'mirror'));
                     this.log(id.toUpperCase(), t.selectedIds.length + ' object(s) transformed.');
                     this.cancel(false);
                 }
