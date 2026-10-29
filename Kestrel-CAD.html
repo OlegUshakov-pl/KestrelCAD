@@ -10421,7 +10421,24 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
             K.validateProject(data);
         }
         else if (ext === 'dxf') {
-            ({ data, report } = await this.io('parse-dxf', await file.arrayBuffer(), name));
+            const bytes = await file.arrayBuffer();
+            // Some exporters write DWG data under a .dxf name (AC1027 etc. is a
+            // DWG version signature, not a DXF group code). Sniff the content
+            // and route it through the local codec instead of failing parse.
+            const head = new TextDecoder('latin1').decode(new Uint8Array(bytes, 0, 4));
+            if (['AC10', 'AC1.', 'AC2.', 'MC0.'].includes(head)) {
+                const caps = await this.getCapabilities();
+                if (!caps.dwgRead) {
+                    await this.dwgDialog(caps);
+                    return;
+                }
+                const response = await this.convert('dwg-to-dxf', bytes);
+                ({ data, report } = await this.io('parse-dxf', await response.arrayBuffer(), name));
+                K.SourceDocument?.withOriginalDWG(data, bytes, file.name);
+                report.warnings.unshift('The file has a .dxf extension but contains DWG data. It was converted by the local codec and is retained as a source archive.');
+            }
+            else
+                ({ data, report } = await this.io('parse-dxf', bytes, name));
         }
         else if (ext === 'dwg') {
             const caps = await this.getCapabilities();

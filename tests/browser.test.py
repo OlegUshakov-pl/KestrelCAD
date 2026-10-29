@@ -225,6 +225,19 @@ with sync_playwright() as p:
     def native_file():
         page.locator('#file-input').set_input_files(str(ROOT/'examples/courtyard.kcad'));page.wait_for_function("kestrel.doc.name.includes('Courtyard')",timeout=10000);eq(count(),265)
     test('native project file input restores the complete drawing',native_file)
+    def dwg_mislabeled_dxf():
+        import shutil, subprocess
+        exe = shutil.which('dxf2dwg')
+        if not exe:
+            return 'skipped (no dxf2dwg converter on PATH)'
+        subprocess.run([exe, '-v0', '-y', '-o', str(OUT/'mislabeled.dxf'), str(ROOT/'tests/fixtures/analytic-roundtrip.dxf')], check=True, capture_output=True, timeout=60)
+        assert (OUT/'mislabeled.dxf').read_bytes().startswith(b'AC10'), 'converter did not produce DWG data'
+        page.locator('#file-input').set_input_files(str(OUT/'mislabeled.dxf'))
+        page.wait_for_function("kestrel.doc.name==='mislabeled'", timeout=20000)
+        assert count()>0
+        assert state('kestrel.lastImportReport.warnings.some(w=>w.includes("DWG data"))')
+        close_modal()
+    test('a DWG saved with a .dxf extension opens through the codec bridge',dwg_mislabeled_dxf)
     def dxf_export():
         with page.expect_download(timeout=15000) as d:
             page.evaluate("kestrel.run('export-dxf')")
