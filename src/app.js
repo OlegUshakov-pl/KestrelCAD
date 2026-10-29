@@ -185,7 +185,22 @@
             $('explorer-search').oninput = () => this.refreshExplorer();
             $('explorer-list').addEventListener('click', e => this.explorerClick(e));
             $('ribbon').addEventListener('change', e => { const target = e.target; if (target.id === 'ribbon-layer') {
-                this.doc.currentLayer = target.value;
+                const selected = this.doc.selected(true);
+                if (this.doc.selection.size && selected.length) {
+                    // With active selection the layer dropdown reassigns the
+                    // selected objects (matching the properties panel), like
+                    // AutoCAD's layer control.
+                    this.doc.transaction('Assign layer', () => {
+                        for (const original of selected) {
+                            const e = K.clone(original);
+                            e.layer = target.value;
+                            this.doc.replace(e.id, e);
+                        }
+                    });
+                    this.log('Layer', selected.length + ' object(s) assigned to ' + this.doc.layer(target.value).name + '.');
+                }
+                else
+                    this.doc.currentLayer = target.value;
                 this.refresh();
                 this.saveSoon();
             }

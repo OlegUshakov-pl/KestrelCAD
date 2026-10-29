@@ -209,6 +209,16 @@ with sync_playwright() as p:
     def units():
         fresh();command('L 0,0 254,0 ENTER');action('units');submit({'units':'in'},{'convert':True});eq(state('kestrel.doc.units'),'in');near(state('kestrel.doc.entities[0].points[1][0]'),10);action('undo');eq(state('kestrel.doc.units'),'mm');near(state('kestrel.doc.entities[0].points[1][0]'),254)
     test('units conversion rescales actual geometry and is undoable',units)
+    def ribbon_layer():
+        fresh();page.evaluate("kestrel.setRibbon('Home')");command('L 0,0 100,0 ENTER');page.evaluate("kestrel.doc.selection=new Set([kestrel.doc.entities[0].id]);kestrel.refresh()")
+        def pick(name):page.evaluate(f"const s=document.getElementById('ribbon-layer');s.value=[...s.options].find(o=>o.textContent==='{name}').value;s.dispatchEvent(new Event('change',{{bubbles:true}}))")
+        pick('A-OPENING')
+        eq(state('kestrel.doc.layerMap.get(kestrel.doc.entities[0].layer).name'),'A-OPENING');eq(count(),1)
+        page.evaluate("kestrel.doc.selection.clear();kestrel.refresh()");pick('A-WALL')
+        eq(state('kestrel.doc.layerMap.get(kestrel.doc.currentLayer).name'),'A-WALL');eq(state('kestrel.doc.layerMap.get(kestrel.doc.entities[0].layer).name'),'A-OPENING')
+        page.evaluate("kestrel.doc.selection=new Set([kestrel.doc.entities[0].id]);kestrel.refresh()");pick('A-CENTER')
+        eq(state('kestrel.doc.layerMap.get(kestrel.doc.entities[0].layer).name'),'A-CENTER');action('undo');eq(state('kestrel.doc.layerMap.get(kestrel.doc.entities[0].layer).name'),'A-OPENING')
+    test('ribbon layer select reassigns active selection or changes the current layer',ribbon_layer)
     def toggles():
         fresh();page.locator('#viewport').focus()
         for key,setting in [('F3','osnap'),('F7','grid'),('F8','ortho'),('F9','snap'),('F10','polar')]:
