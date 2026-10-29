@@ -119,7 +119,14 @@
                 record = { type: g.value.trim().toUpperCase(), start: g.start, end: g.end, groups: [], section, table, block };
                 records.push(record);
             }
-            if (!record) throw Error('DXF must begin with a record.');
+            else if (!record) {
+                // Leading 999 comment groups (emitted by LibreDWG and other
+                // exporters) are a valid DXF preamble; keep them as a comment
+                // record so source-preserving round trips retain the bytes.
+                if (g.code !== 999) throw Error('DXF must begin with a record.');
+                record = { type: 'COMMENT', start: g.start, end: g.end, groups: [], section: '', table: '', block: '' };
+                records.push(record);
+            }
             record.groups.push(g); record.end = g.end;
             if (record.type === 'SECTION' && g.code === 2) { section = g.value.trim(); record.section = section; }
             if (record.type === 'TABLE' && g.code === 2) { table = g.value.trim(); record.table = table; }
