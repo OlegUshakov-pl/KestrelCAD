@@ -1,3 +1,5 @@
 # Test-only dependencies; the application has no Python or npm package dependencies.
 playwright==1.57.0
 ezdxf==1.4.4
+# Synthetic outline-font builder used by tests/fonts.browser.py.
+fonttools==4.67.0
