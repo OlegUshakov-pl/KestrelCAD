@@ -254,8 +254,12 @@ with sync_playwright() as p:
         download=d.value;assert download.suggested_filename.endswith('.dxf');download.save_as(OUT/'browser-export.dxf');assert (OUT/'browser-export.dxf').stat().st_size>10000
     test('DXF export produces an actual browser download',dxf_export)
     def native_export():
+        # The active document at this point is the one opened by the previous
+        # test (the codec-bridge mislabeled DWG, when a converter is on PATH),
+        # so compare against the live document instead of a hard-coded count.
+        expected=state('kestrel.doc.entities.length')
         with page.expect_download(timeout=15000) as d:page.locator('#quick-access [data-action="save"]').click()
-        d.value.save_as(OUT/'browser-export.kcad');data=json.loads((OUT/'browser-export.kcad').read_text());eq(data['format'],'kestrel-cad');eq(len(data['entities']),265)
+        d.value.save_as(OUT/'browser-export.kcad');data=json.loads((OUT/'browser-export.kcad').read_text());eq(data['format'],'kestrel-cad');eq(len(data['entities']),expected)
     test('Save project produces a valid native browser download',native_export)
     def png_export():
         with page.expect_download(timeout=15000) as d:page.evaluate("kestrel.run('export-png')")

@@ -335,7 +335,45 @@
             doc.production.dimstyles = recs.filter(r => r.section === 'TABLES' && r.type === 'DIMSTYLE').map(r => ({ name: decode(str(r, 2, 'STANDARD')), textHeight: Math.max(1e-7, num(r, 140, 2.5)), precision: Math.max(0, Math.min(8, Math.round(num(r, 271, 2)))), scale: Math.max(1e-7, num(r, 144, 1)), prefix: '', suffix: '' }));
             if (!doc.production.dimstyles.length) doc.production.dimstyles = K.Production.defaults().dimstyles;
             const usedBlockNames = new Set();
-            for (const block of blocks.values()) {
+            // Real DWG-derived DXF files accumulate hundreds of anonymous
+            // dimension/data blocks (names like *X12) that model space never
+            // references. Import only definitions reachable from INSERT
+            // entities (transitively) plus named definitions, so the 2048
+            // block project limit is not exhausted by unreferenced records.
+            const reachable = new Set();
+            function reach(name) {
+                if (!blocks.has(name) || reachable.has(name))
+                    return;
+                reachable.add(name);
+                for (const r of blocks.get(name).records)
+                    if (r.type === 'INSERT')
+                        reach(str(r, 2));
+            }
+            // INSERT references the block by code 2; DIMENSION references its
+            // anonymous display block by code 2, so keep those too.
+            for (const r of recs)
+                if (r.section === 'ENTITIES' && (r.type === 'INSERT' || r.type === 'DIMENSION'))
+                    reach(str(r, 2));
+            let selected = [...blocks.values()].filter(b => reachable.has(b.name) || !/^\*/.test(b.name));
+            if (selected.length > 2048) {
+                // Named definitions are user content (title blocks and similar),
+                // so reachable definitions come first and named ones fill the
+                // remaining project budget before anything is dropped.
+                const keep = [...blocks.values()].filter(b => reachable.has(b.name));
+                for (const b of [...blocks.values()].filter(b => !/^\*/.test(b.name) && !reachable.has(b.name))) {
+                    if (keep.length >= 2048)
+                        break;
+                    keep.push(b);
+                }
+                selected = keep;
+            }
+            const spaceNames = /^\*(?:Model_Space|Paper_Space\d*)$/i, kept = new Set(selected.map(b => b.name));
+            const pruned = [...blocks.values()].filter(b => !kept.has(b.name) && !spaceNames.test(b.name)).length;
+            if (pruned)
+                report.skipped['Unused block definitions'] = (report.skipped['Unused block definitions'] || 0) + pruned;
+            if (pruned)
+                report.warnings.push(pruned + ' unreferenced block definitions were not imported.');
+            for (const block of selected) {
                 // Model/paper-space containers are not user definitions. Importing them
                 // repeatedly otherwise manufactures colliding _Model_Space blocks.
                 if (/^\*(?:Model_Space|Paper_Space\d*)$/i.test(block.name)) continue;
