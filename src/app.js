@@ -1290,7 +1290,7 @@
             case 'chamfer': return t.source ? 'Select second line, near the end to retain' : 'Select first line, near the end to retain';
             case 'trim': return 'Click the curve interval to trim (line, circle, arc)';
             case 'extend': return 'Click the line near the endpoint to extend';
-            case 'hatch': return 'Select a closed boundary to hatch';
+            case 'hatch': return 'Select a closed boundary, or click inside it';
             case 'extrude': return 'Select a closed planar profile';
             case 'match': return t.source ? 'Select target object (Escape to finish)' : 'Select source object';
             case 'paste': return 'Specify clipboard insertion point';
@@ -1418,6 +1418,32 @@
         }
         else
             this.doc.selection = new Set(ids); this.selectionChanged(); return hit; }
+        enclosingBoundary(p) {
+            // Find the innermost visible closed boundary whose region contains
+            // the clicked world point, so a pick inside a shape still hatches it.
+            this.ensureIndex();
+            let best = null, bestArea = Infinity;
+            for (const item of this.index.items.values()) {
+                const e = item.e;
+                if (!this.doc.editable(e) || !this.doc.visible(e) || !G.closed(e))
+                    continue;
+                let ring;
+                try {
+                    ring = G.path(e, .1);
+                }
+                catch {
+                    continue;
+                }
+                if (ring.length < 3 || !inside(p, ring))
+                    continue;
+                const area = Math.abs(polygonArea(ring));
+                if (area > EPS && area < bestArea) {
+                    bestArea = area;
+                    best = e;
+                }
+            }
+            return best;
+        }
         snapPoint(p, z = 0, excludeId = null) {
             let world = this.camera.unproject(p[0], p[1], z) || this.camera.pointOnView(p[0], p[1]);
             this.snapTarget = null;
@@ -1663,8 +1689,20 @@
                     this.invalidate();
                     return;
                 }
-                if (!hit)
+                if (!hit) {
+                    if (id === 'hatch') {
+                        // AutoCAD-style pick point: clicking inside a closed shape
+                        // hatches the innermost boundary enclosing that point.
+                        const enclosed = this.enclosingBoundary(p);
+                        if (!enclosed)
+                            throw Error('No closed boundary encloses that point. Click inside or on a closed shape.');
+                        this.doc.selection = new Set([enclosed.id]);
+                        this.selectionChanged();
+                        this.hatchDialog([enclosed]);
+                        return;
+                    }
                     throw Error('No eligible editable object at that point.');
+                }
                 if (id === 'hatch' || id === 'extrude') {
                     if (!G.closed(hit.e))
                         throw Error('Choose a closed polyline, circle, ellipse or hatch.');
