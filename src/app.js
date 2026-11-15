@@ -1461,6 +1461,101 @@
                 if (c.closed && pts.length >= 3)
                     edges.push({ a: pts[pts.length - 1], b: pts[0], splits: [] });
             }
+            // Bridge open ends: imported rings often miss the closing edge, and
+            // hatching tolerates small gaps between boundary ends (gap tolerance).
+            if (edges.length && edges.length <= 3000) {
+                const preKey = v => Math.round(v[0] / tol) + ':' + Math.round(v[1] / tol), preDeg = new Map(), atNode = new Map();
+                edges.forEach((ed, i) => {
+                    for (const v of [ed.a, ed.b]) {
+                        const k = preKey(v);
+                        preDeg.set(k, (preDeg.get(k) || 0) + 1);
+                        if (!atNode.has(k))
+                            atNode.set(k, []);
+                        atNode.get(k).push(i);
+                    }
+                });
+                const tips = [];
+                edges.forEach((ed, i) => {
+                    for (const v of [ed.a, ed.b])
+                        if (preDeg.get(preKey(v)) === 1)
+                            tips.push({ coord: v, edge: i, partner: -1, step: 0, done: false });
+                });
+                // Group connected edges into open chains so a missing closing
+                // edge (one tessellation step wide) can be detected and bridged.
+                const walked = new Set();
+                for (let i = 0; i < tips.length; i++) {
+                    if (walked.has(i))
+                        continue;
+                    let curKey = preKey(tips[i].coord), curEdge = tips[i].edge, len = 0, count = 0, endTip = -1;
+                    for (let guard = 0; guard <= edges.length; guard++) {
+                        const ed = edges[curEdge];
+                        len += V.len(V.sub(ed.b, ed.a));
+                        count++;
+                        const nextKey = preKey(preKey(ed.a) === curKey ? ed.b : ed.a);
+                        const deg = preDeg.get(nextKey) || 0;
+                        if (deg === 1) {
+                            endTip = tips.findIndex(t => t !== tips[i] && preKey(t.coord) === nextKey);
+                            break;
+                        }
+                        if (deg !== 2)
+                            break;
+                        const next = atNode.get(nextKey).filter(e2 => e2 !== curEdge);
+                        if (next.length !== 1)
+                            break;
+                        curEdge = next[0];
+                        curKey = nextKey;
+                    }
+                    if (endTip >= 0) {
+                        tips[i].partner = endTip;
+                        tips[endTip].partner = i;
+                        tips[i].step = tips[endTip].step = len / Math.max(count, 1);
+                        walked.add(i);
+                        walked.add(endTip);
+                    }
+                }
+                for (let i = 0; i < tips.length; i++) {
+                    const j = tips[i].partner;
+                    if (j <= i)
+                        continue;
+                    const A = tips[i].coord, B = tips[j].coord;
+                    if (V.dist(A, B) > Math.max(extent * 0.02, tips[i].step * 2.5))
+                        continue;
+                    // A gap may only be bridged when it continues the chain —
+                    // i.e. the bridge aligns with both end tangents. This keeps
+                    // genuinely open shapes (L-chains, wide arcs) from closing.
+                    const dirOf = t => {
+                        const ed = edges[t.edge];
+                        const other = preKey(ed.a) === preKey(t.coord) ? ed.b : ed.a;
+                        return V.norm(V.sub(t.coord, other));
+                    };
+                    const bridge = V.norm(V.sub(B, A));
+                    if (V.dot(dirOf(tips[i]), bridge) < 0.766 || V.dot(dirOf(tips[j]), V.mul(bridge, -1)) < 0.766)
+                        continue;
+                    edges.push({ a: A, b: B, splits: [] });
+                    tips[i].done = true;
+                    tips[j].done = true;
+                }
+                // Leftover open ends that stop near another edge join it directly.
+                for (const t of tips) {
+                    if (t.done)
+                        continue;
+                    let bestE = -1, bestD = extent * 0.02, bestT = 0;
+                    for (let j = 0; j < edges.length; j++) {
+                        if (j === t.edge)
+                            continue;
+                        const sd = segmentDistance(t.coord, edges[j].a, edges[j].b);
+                        if (sd.d < bestD) {
+                            bestD = sd.d;
+                            bestE = j;
+                            bestT = sd.t;
+                        }
+                    }
+                    if (bestE >= 0) {
+                        t.done = true;
+                        edges[bestE].splits.push({ t: bestT, pt: t.coord });
+                    }
+                }
+            }
             // Split edges where they touch or cross so subdivided regions
             // (half-discs, T-junctions, crossings) become traceable faces.
             if (edges.length && edges.length <= 3000) {
@@ -2422,7 +2517,7 @@
             throw Error('This command edits LINE, CIRCLE and ARC entities. Explode a polyline first.');
         }        entityGrips(e) {
             const result = [];
-            if (e.points && ['LINE', 'POLYLINE', 'HATCH', 'DIMENSION'].includes(e.type)) {
+            if (e.points && ['LINE', 'POLYLINE', 'DIMENSION'].includes(e.type)) {
                 e.points.forEach((p, i) => result.push({ kind: 'point', index: i, point: p }));
                 if (e.type === 'LINE')
                     result.push({ kind: 'translate', point: V.lerp(...e.points, .5) });
@@ -2435,6 +2530,8 @@
                     catch { /* Rendered text position is unavailable for invalid dimensions. */ }
                 }
             }
+            else if (e.type === 'HATCH')
+                result.push({ kind: 'translate', point: centerOf([e]).center });
             else if (e.type === 'SPLINE')
                 (e.controlPoints || e.points).forEach((p, i) => result.push({ kind: 'control', index: i, point: p }));
             else if (e.center) {
