@@ -1418,14 +1418,16 @@
         }
         else
             this.doc.selection = new Set(ids); this.selectionChanged(); return hit; }
-        enclosingBoundary(p) {
-            // Find the innermost visible closed boundary whose region contains
-            // the clicked world point, so a pick inside a shape still hatches it.
+        enclosingBoundary(p, allowEdge = false) {
+            // AutoCAD-style pick point: find the innermost closed region that
+            // contains the clicked world point — either a single closed entity
+            // or a region enclosed by several connected lines and arcs.
             this.ensureIndex();
-            let best = null, bestArea = Infinity;
+            const candidates = [], rawEdges = [];
+            let extent = 0;
             for (const item of this.index.items.values()) {
                 const e = item.e;
-                if (!this.doc.editable(e) || !this.doc.visible(e) || !G.closed(e))
+                if (!this.doc.editable(e) || !this.doc.visible(e))
                     continue;
                 let ring;
                 try {
@@ -1434,15 +1436,100 @@
                 catch {
                     continue;
                 }
-                if (ring.length < 3 || !inside(p, ring))
+                if (ring.length >= 3 && G.closed(e)) {
+                    candidates.push({ ring, e });
                     continue;
+                }
+                if (!['LINE', 'POLYLINE', 'ARC', 'SPLINE', 'ELLIPSE'].includes(e.type))
+                    continue;
+                for (const s of item.g.segments || []) {
+                    for (const v of s)
+                        extent = Math.max(extent, Math.abs(v[0]), Math.abs(v[1]), Math.abs(v[2]));
+                    rawEdges.push(s);
+                }
+            }
+            const test = candidates.map(c => ({ ring: c.ring, e: c.e }));
+            // Detect closed loops in the graph of connected edge endpoints.
+            if (rawEdges.length && rawEdges.length <= 100000) {
+                const tol = Math.max(1e-6, extent * 1e-7), nodes = new Map(), graph = new Map(), build = [];
+                const key = v => Math.round(v[0] / tol) + ':' + Math.round(v[1] / tol) + ':' + Math.round(v[2] / tol);
+                const node = v => {
+                    const k = key(v);
+                    if (!nodes.has(k))
+                        nodes.set(k, v);
+                    return k;
+                };
+                for (const s of rawEdges) {
+                    if (V.len(V.sub(s[1], s[0])) < tol)
+                        continue;
+                    const rec = { a: node(s[0]), b: node(s[1]), p0: s[0], p1: s[1] };
+                    build.push(rec);
+                    if (!graph.has(rec.a))
+                        graph.set(rec.a, []);
+                    if (!graph.has(rec.b))
+                        graph.set(rec.b, []);
+                    graph.get(rec.a).push(rec);
+                    graph.get(rec.b).push(rec);
+                }
+                const used = new Set();
+                for (const first of build) {
+                    if (used.has(first))
+                        continue;
+                    used.add(first);
+                    const pts = [first.p0, first.p1];
+                    let cur = first.b;
+                    const start = first.a;
+                    let closed = false;
+                    for (let guard = 0; guard <= build.length; guard++) {
+                        if (cur === start) {
+                            closed = true;
+                            break;
+                        }
+                        let next = null;
+                        for (const rec of graph.get(cur) || [])
+                            if (!used.has(rec)) {
+                                next = rec;
+                                break;
+                            }
+                        if (!next)
+                            break;
+                        used.add(next);
+                        if (next.a === cur) {
+                            pts.push(next.p1);
+                            cur = next.b;
+                        }
+                        else {
+                            pts.push(next.p0);
+                            cur = next.a;
+                        }
+                    }
+                    if (closed) {
+                        pts.pop();
+                        if (pts.length >= 3)
+                            test.push({ ring: pts, e: null });
+                    }
+                }
+            }
+            let best = null, bestArea = Infinity;
+            for (const { ring, e } of test) {
                 const area = Math.abs(polygonArea(ring));
-                if (area > EPS && area < bestArea) {
+                if (area < EPS || area >= bestArea)
+                    continue;
+                if (inside(p, ring) || allowEdge && this.onRingEdge(p, ring, Math.max(1e-6, extent * 1e-7))) {
                     bestArea = area;
-                    best = e;
+                    best = e || { type: 'POLYLINE', points: ring, closed: true };
                 }
             }
             return best;
+        }
+        onRingEdge(p, ring, tol) {
+            const eps = tol * 4;
+            for (let i = 0; i < ring.length; i++) {
+                const a = ring[i], b = ring[(i + 1) % ring.length];
+                if (segmentDistance(p, a, b).d <= eps)
+                    return true;
+            }
+            return false;
         }
         snapPoint(p, z = 0, excludeId = null) {
             let world = this.camera.unproject(p[0], p[1], z) || this.camera.pointOnView(p[0], p[1]);
@@ -1692,20 +1779,37 @@
                 if (!hit) {
                     if (id === 'hatch') {
                         // AutoCAD-style pick point: clicking inside a closed shape
-                        // hatches the innermost boundary enclosing that point.
+                        // hatches the innermost enclosing boundary, whether it is
+                        // one closed entity or a region of connected lines.
                         const enclosed = this.enclosingBoundary(p);
                         if (!enclosed)
-                            throw Error('No closed boundary encloses that point. Click inside or on a closed shape.');
-                        this.doc.selection = new Set([enclosed.id]);
-                        this.selectionChanged();
+                            throw Error('No closed boundary encloses that point. Click inside a closed shape.');
+                        if (enclosed.id) {
+                            this.doc.selection = new Set([enclosed.id]);
+                            this.selectionChanged();
+                        }
                         this.hatchDialog([enclosed]);
                         return;
                     }
                     throw Error('No eligible editable object at that point.');
                 }
                 if (id === 'hatch' || id === 'extrude') {
-                    if (!G.closed(hit.e))
+                    if (!G.closed(hit.e)) {
+                        if (id === 'hatch') {
+                            // The clicked edge may be part of a closed region drawn
+                            // from separate lines — try the enclosing-region search.
+                            const enclosed = this.enclosingBoundary(p, true);
+                            if (enclosed) {
+                                if (enclosed.id) {
+                                    this.doc.selection = new Set([enclosed.id]);
+                                    this.selectionChanged();
+                                }
+                                this.hatchDialog([enclosed]);
+                                return;
+                            }
+                        }
                         throw Error('Choose a closed polyline, circle, ellipse or hatch.');
+                    }
                     this.doc.selection = new Set([hit.e.id]);
                     this.selectionChanged();
                     if (id === 'hatch')
