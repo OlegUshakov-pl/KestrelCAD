@@ -126,6 +126,8 @@
         return result;
     }
     function geometry(e, tolerance = .5) {
+        if (e.type === 'HATCH' && e.loops && K.Production)
+            return K.Production.hatchGeometry(e);
         const segments = [], triangles = [], texts = [], snaps = [], wireSegments = [];
         if (e.type === 'MESH') {
             const used = new Map();
@@ -268,6 +270,8 @@
                 const b = basis(normal), bb = basis(out.normal), angle = e.angle ?? Math.PI / 4, dir = M.point(m, V.add(V.mul(b.x, Math.cos(angle)), V.mul(b.y, Math.sin(angle))), 0), x = M.point(m, b.x, 0), y = M.point(m, b.y, 0);
                 out.angle = Math.atan2(V.dot(dir, bb.y), V.dot(dir, bb.x));
                 out.spacing = (e.spacing || 10) * V.len(V.cross(x, y)) / Math.max(V.len(dir), EPS);
+                if (e.loops)
+                    out.loops = e.loops.map(loop => loop.map(p => M.point(m, p)));
             }
             if (e.type === 'DIMENSION') {
                 const oldSide = V.norm(V.cross(normal, V.sub(e.points[1], e.points[0]))), side = V.norm(V.cross(out.normal, V.sub(out.points[1], out.points[0])));

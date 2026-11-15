@@ -1054,7 +1054,8 @@
             } } }); }
         hatchDialog(entities) { this.cancel(false); const size = centerOf(entities).size, defaultSpacing = Math.max(.1, Math.max(size[0], size[1]) / 35); this.dialog({ title: 'Hatch selected boundaries', html: `<p>${entities.length} closed ${entities.length === 1 ? 'boundary' : 'boundaries'} selected. Patterns are clipped to each simple polygon.</p><div class="form-grid"><div class="form-field"><label>Pattern</label><select name="pattern"><option value="ANSI31">ANSI31 — diagonal</option><option value="cross">Crosshatch</option><option value="solid">Solid fill</option></select></div>${this.field('spacing', 'Spacing (' + this.doc.units + ')', Number(defaultSpacing.toPrecision(3)), 'number', 'min="0.001"')}${this.field('angle', 'Angle (degrees)', 45)}</div><div class="dialog-note">The hatch is an independent entity. Islands and associative boundary updates are not part of this implementation.</div>`, submit: 'Create hatch', onSubmit: f => { const spacing = positive(f.spacing), a = finite(f.angle) * Math.PI / 180, ids = []; this.doc.transaction('Hatch boundaries', () => { for (const e of entities) {
                 const p = G.path(e, .5);
-                const h = this.addGeometry({ type: 'HATCH', points: p, pattern: f.pattern, spacing, angle: a, normal: faceNormal(p), layer: this.doc.layerMap.has('hatch') ? 'hatch' : this.doc.currentLayer });
+                // Production hatch loops must list every ring: outer boundary first.
+                const h = this.addGeometry({ type: 'HATCH', points: p, ...(e.loops ? { loops: [p, ...e.loops] } : {}), pattern: f.pattern, spacing, angle: a, normal: faceNormal(p), layer: this.doc.layerMap.has('hatch') ? 'hatch' : this.doc.currentLayer });
                 ids.push(h.id);
             } this.doc.selection = new Set(ids); }); } }); }
         offsetDialog() { const selected = this.doc.selected(true).filter(e => ['LINE', 'POLYLINE', 'CIRCLE', 'ARC'].includes(e.type)); this.dialog({ title: 'Offset geometry', html: `<p>Choose an offset distance. Then pick the object and the side on which to place the offset.</p><div class="form-grid">${this.field('distance', 'Distance (' + this.doc.units + ')', Math.max(.1, this.settings.snapSpacing), 'number', 'min="0.000001"')}</div><div class="dialog-note">Lines, planar polylines, circles and arcs are supported. Polyline offsets use mitered corners; self-intersection cleanup is not automatic.</div>`, submit: 'Choose offset side', onSubmit: f => { this.startTool('offset', { distance: positive(f.distance) }); if (selected.length === 1)
@@ -1419,108 +1420,210 @@
         else
             this.doc.selection = new Set(ids); this.selectionChanged(); return hit; }
         enclosingBoundary(p, allowEdge = false) {
-            // AutoCAD-style pick point: find the innermost closed region that
-            // contains the clicked world point — either a single closed entity
-            // or a region enclosed by several connected lines and arcs.
+            // AutoCAD-style pick point: find the smallest closed region that
+            // contains the clicked world point. Regions may be single closed
+            // entities or areas enclosed by connected or crossing curves — e.g.
+            // a chord line splits a circle into two hatchable half-discs.
             this.ensureIndex();
-            const candidates = [], rawEdges = [];
+            const curves = [];
             let extent = 0;
             for (const item of this.index.items.values()) {
                 const e = item.e;
-                if (!this.doc.editable(e) || !this.doc.visible(e))
+                if (!this.doc.editable(e) || !this.doc.visible(e) || !['LINE', 'POLYLINE', 'CIRCLE', 'ARC', 'ELLIPSE', 'SPLINE'].includes(e.type))
                     continue;
-                let ring;
+                let pts;
                 try {
-                    ring = G.path(e, .1);
+                    pts = G.path(e, .1);
                 }
                 catch {
                     continue;
                 }
-                if (ring.length >= 3 && G.closed(e)) {
-                    candidates.push({ ring, e });
+                if (!pts || pts.length < 2)
                     continue;
-                }
-                if (!['LINE', 'POLYLINE', 'ARC', 'SPLINE', 'ELLIPSE'].includes(e.type))
-                    continue;
-                for (const s of item.g.segments || []) {
-                    for (const v of s)
-                        extent = Math.max(extent, Math.abs(v[0]), Math.abs(v[1]), Math.abs(v[2]));
-                    rawEdges.push(s);
-                }
+                for (const q of pts)
+                    extent = Math.max(extent, Math.abs(q[0]), Math.abs(q[1]));
+                curves.push({ e, pts, closed: G.closed(e) });
             }
-            const test = candidates.map(c => ({ ring: c.ring, e: c.e }));
-            // Detect closed loops in the graph of connected edge endpoints.
-            if (rawEdges.length && rawEdges.length <= 100000) {
-                const tol = Math.max(1e-6, extent * 1e-7), nodes = new Map(), graph = new Map(), build = [];
-                const key = v => Math.round(v[0] / tol) + ':' + Math.round(v[1] / tol) + ':' + Math.round(v[2] / tol);
-                const node = v => {
-                    const k = key(v);
-                    if (!nodes.has(k))
-                        nodes.set(k, v);
-                    return k;
-                };
-                for (const s of rawEdges) {
-                    if (V.len(V.sub(s[1], s[0])) < tol)
-                        continue;
-                    const rec = { a: node(s[0]), b: node(s[1]), p0: s[0], p1: s[1] };
-                    build.push(rec);
-                    if (!graph.has(rec.a))
-                        graph.set(rec.a, []);
-                    if (!graph.has(rec.b))
-                        graph.set(rec.b, []);
-                    graph.get(rec.a).push(rec);
-                    graph.get(rec.b).push(rec);
-                }
-                const used = new Set();
-                for (const first of build) {
-                    if (used.has(first))
-                        continue;
-                    used.add(first);
-                    const pts = [first.p0, first.p1];
-                    let cur = first.b;
-                    const start = first.a;
-                    let closed = false;
-                    for (let guard = 0; guard <= build.length; guard++) {
-                        if (cur === start) {
-                            closed = true;
-                            break;
+            if (!curves.length)
+                return null;
+            const tol = Math.max(1e-12, extent * 1e-9), minArea = Math.pow(Math.max(tol, extent * 1e-7), 2), edgeTol = tol * 4;
+            // Tessellate every curve into straight edges; closed rings get a
+            // closing edge unless the tessellation already repeats the origin.
+            let edges = [];
+            for (const c of curves) {
+                let pts = c.pts;
+                if (c.closed && V.len(V.sub(pts[0], pts[pts.length - 1])) <= tol)
+                    pts = pts.slice(0, -1);
+                if (pts.length < 2)
+                    continue;
+                for (let i = 0; i + 1 < pts.length; i++)
+                    edges.push({ a: pts[i], b: pts[i + 1], splits: [] });
+                if (c.closed && pts.length >= 3)
+                    edges.push({ a: pts[pts.length - 1], b: pts[0], splits: [] });
+            }
+            // Split edges where they touch or cross so subdivided regions
+            // (half-discs, T-junctions, crossings) become traceable faces.
+            if (edges.length && edges.length <= 3000) {
+                const boxes = edges.map(ed => [Math.min(ed.a[0], ed.b[0]), Math.min(ed.a[1], ed.b[1]), Math.max(ed.a[0], ed.b[0]), Math.max(ed.a[1], ed.b[1])]), pad = extent * 1e-6;
+                for (let i = 0; i < edges.length; i++) {
+                    const A = edges[i].a, B = edges[i].b, bi = boxes[i];
+                    for (let j = i + 1; j < edges.length; j++) {
+                        const bj = boxes[j];
+                        if (bi[0] > bj[2] + pad || bj[0] > bi[2] + pad || bi[1] > bj[3] + pad || bj[1] > bi[3] + pad)
+                            continue;
+                        const C = edges[j].a, D = edges[j].b;
+                        const r0 = B[0] - A[0], r1 = B[1] - A[1], s0 = D[0] - C[0], s1 = D[1] - C[1];
+                        const den = r0 * s1 - r1 * s0;
+                        if (Math.abs(den) <= 1e-12 * Math.hypot(r0, r1) * Math.hypot(s0, s1))
+                            continue;
+                        const ac0 = C[0] - A[0], ac1 = C[1] - A[1];
+                        const t = (ac0 * s1 - ac1 * s0) / den, u = (ac0 * r1 - ac1 * r0) / den;
+                        const epsL = 1e-9, tIn = t > epsL && t < 1 - epsL, uIn = u > epsL && u < 1 - epsL;
+                        if (!tIn && !uIn)
+                            continue;
+                        if (tIn) {
+                            const pt = uIn ? [C[0] + u * s0, C[1] + u * s1] : Math.abs(u) <= epsL ? C : Math.abs(u - 1) <= epsL ? D : null;
+                            if (pt)
+                                edges[i].splits.push({ t, pt });
                         }
-                        let next = null;
-                        for (const rec of graph.get(cur) || [])
-                            if (!used.has(rec)) {
-                                next = rec;
-                                break;
-                            }
-                        if (!next)
-                            break;
-                        used.add(next);
-                        if (next.a === cur) {
-                            pts.push(next.p1);
-                            cur = next.b;
-                        }
-                        else {
-                            pts.push(next.p0);
-                            cur = next.a;
+                        if (uIn) {
+                            const shared = tIn ? [C[0] + u * s0, C[1] + u * s1] : Math.abs(t) <= epsL ? A : Math.abs(t - 1) <= epsL ? B : null;
+                            if (shared)
+                                edges[j].splits.push({ t: u, pt: shared });
                         }
                     }
-                    if (closed) {
-                        pts.pop();
-                        if (pts.length >= 3)
-                            test.push({ ring: pts, e: null });
+                }
+                const sub = [];
+                for (const ed of edges) {
+                    if (!ed.splits.length) {
+                        sub.push({ a: ed.a, b: ed.b });
+                        continue;
+                    }
+                    ed.splits.sort((x, y) => x.t - y.t);
+                    let prev = ed.a, prevT = 0;
+                    for (const s of ed.splits) {
+                        if (s.t <= prevT + 1e-12 || s.t >= 1 - 1e-12)
+                            continue;
+                        sub.push({ a: prev, b: s.pt });
+                        prev = s.pt;
+                        prevT = s.t;
+                    }
+                    sub.push({ a: prev, b: ed.b });
+                }
+                edges = sub;
+            }
+            // Directed half-edge graph over the (possibly split) edges.
+            const nodes = new Map(), out = new Map(), directed = [];
+            const key = v => Math.round(v[0] / tol) + ':' + Math.round(v[1] / tol);
+            const node = v => {
+                const k = key(v);
+                if (!nodes.has(k))
+                    nodes.set(k, v);
+                return k;
+            };
+            edges.forEach((ed, i) => {
+                const ka = node(ed.a), kb = node(ed.b);
+                if (ka === kb)
+                    return;
+                directed.push({ from: ka, to: kb, edge: i }, { from: kb, to: ka, edge: i });
+            });
+            for (const d of directed) {
+                if (!out.has(d.from))
+                    out.set(d.from, []);
+                out.get(d.from).push(d);
+            }
+            // Trace the face bounded to one side of a directed edge: at each
+            // node take the outgoing edge just clockwise of the reversed one.
+            const dkey = d => d.from + '>' + d.to + '#' + d.edge;
+            const tried = new Set();
+            const trace = start => {
+                const poly = [], startKey = dkey(start);
+                let cur = start;
+                for (let guard = 0; guard <= directed.length; guard++) {
+                    tried.add(dkey(cur));
+                    const fromN = nodes.get(cur.from), toN = nodes.get(cur.to);
+                    poly.push(fromN);
+                    const back = Math.atan2(fromN[1] - toN[1], fromN[0] - toN[0]);
+                    let best = null, bestDelta = -1;
+                    for (const cand of out.get(cur.to) || []) {
+                        if (cand.edge === cur.edge)
+                            continue;
+                        const cn = nodes.get(cand.to);
+                        const delta = (Math.atan2(cn[1] - toN[1], cn[0] - toN[0]) - back + TAU) % TAU;
+                        if (delta > bestDelta) {
+                            bestDelta = delta;
+                            best = cand;
+                        }
+                    }
+                    if (!best)
+                        return null;
+                    const bk = dkey(best);
+                    if (bk === startKey)
+                        return poly;
+                    if (tried.has(bk))
+                        return null;
+                    cur = best;
+                }
+                return null;
+            };
+            let face = null;
+            const starts = directed
+                .map(d => ({ d, dist: segmentDistance(p, nodes.get(d.from), nodes.get(d.to)).d }))
+                .sort((x, y) => x.dist - y.dist);
+            for (const { d } of starts) {
+                if (face)
+                    break;
+                if (tried.has(dkey(d)))
+                    continue;
+                const poly = trace(d);
+                if (!poly)
+                    continue;
+                const area = Math.abs(polygonArea(poly));
+                if (area < minArea)
+                    continue;
+                if (inside(p, poly) || allowEdge && this.onRingEdge(p, poly, edgeTol))
+                    face = { poly, area };
+            }
+            // Closed entities remain candidates so a lone circle keeps its id;
+            // a traced face wins when it is strictly smaller (e.g. half-disc).
+            let bestCand = null, candArea = Infinity;
+            for (const c of curves) {
+                if (!c.closed || c.pts.length < 3)
+                    continue;
+                const area = Math.abs(polygonArea(c.pts));
+                if (area < minArea || area >= candArea)
+                    continue;
+                if (inside(p, c.pts) || allowEdge && this.onRingEdge(p, c.pts, edgeTol)) {
+                    candArea = area;
+                    bestCand = c.e;
+                }
+            }
+            let faceOut = null;
+            if (face) {
+                // Islands: closed rings strictly inside the face that do not
+                // contain the pick point become even-odd hatch holes, so a ring
+                // region between two circles hatches correctly. Their area also
+                // shrinks the effective region used when comparing candidates.
+                const loops = [];
+                let islandArea = 0;
+                for (const c of curves) {
+                    if (!c.closed || c.pts.length < 3)
+                        continue;
+                    const area = Math.abs(polygonArea(c.pts));
+                    if (area >= face.area * (1 - 1e-9))
+                        continue;
+                    if (inside(c.pts[0], face.poly) && !inside(p, c.pts)) {
+                        loops.push(c.pts);
+                        islandArea += area;
                     }
                 }
+                faceOut = { poly: face.poly, area: face.area - islandArea, loops };
             }
-            let best = null, bestArea = Infinity;
-            for (const { ring, e } of test) {
-                const area = Math.abs(polygonArea(ring));
-                if (area < EPS || area >= bestArea)
-                    continue;
-                if (inside(p, ring) || allowEdge && this.onRingEdge(p, ring, Math.max(1e-6, extent * 1e-7))) {
-                    bestArea = area;
-                    best = e || { type: 'POLYLINE', points: ring, closed: true };
-                }
-            }
-            return best;
+            if (bestCand && (!faceOut || faceOut.area >= candArea * (1 - 1e-9)))
+                return bestCand;
+            if (faceOut)
+                return faceOut.loops.length ? { type: 'POLYLINE', points: faceOut.poly, closed: true, loops: faceOut.loops } : { type: 'POLYLINE', points: faceOut.poly, closed: true };
+            return null;
         }
         onRingEdge(p, ring, tol) {
             const eps = tol * 4;
@@ -1780,8 +1883,11 @@
                     if (id === 'hatch') {
                         // AutoCAD-style pick point: clicking inside a closed shape
                         // hatches the innermost enclosing boundary, whether it is
-                        // one closed entity or a region of connected lines.
-                        const enclosed = this.enclosingBoundary(p);
+                        // one closed entity or a region of connected lines. The
+                        // raw cursor point is used — snapping must not move the
+                        // pick onto the very boundary it should enclose.
+                        const pick = screen ? this.camera.unproject(screen[0], screen[1], p[2] || 0) || this.camera.pointOnView(screen[0], screen[1]) : p;
+                        const enclosed = this.enclosingBoundary(pick);
                         if (!enclosed)
                             throw Error('No closed boundary encloses that point. Click inside a closed shape.');
                         if (enclosed.id) {
@@ -1797,8 +1903,10 @@
                     if (!G.closed(hit.e)) {
                         if (id === 'hatch') {
                             // The clicked edge may be part of a closed region drawn
-                            // from separate lines — try the enclosing-region search.
-                            const enclosed = this.enclosingBoundary(p, true);
+                            // from separate lines — try the enclosing-region search
+                            // with the raw cursor point, not the snapped one.
+                            const pick = screen ? this.camera.unproject(screen[0], screen[1], p[2] || 0) || this.camera.pointOnView(screen[0], screen[1]) : p;
+                            const enclosed = this.enclosingBoundary(pick, true);
                             if (enclosed) {
                                 if (enclosed.id) {
                                     this.doc.selection = new Set([enclosed.id]);
