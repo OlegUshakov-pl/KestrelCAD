@@ -59,7 +59,7 @@
         }
     } return hex; }
     class Renderer {
-        constructor(canvas, overlay, camera) { this.canvas = canvas; this.overlay = overlay; this.camera = camera; this.ctx = overlay.getContext('2d'); this.backend = 'Starting'; this.device = null; this.sceneKey = ''; this.gridKey = ''; this.origin = [0, 0, 0]; this.theme = 'dark'; this.style = 'wireframe'; this.grid = true; this.lineweights = false; this.stats = { segments: 0, triangles: 0, cpuMs: 0, drawCalls: 0 }; this.buffers = {}; this.onBackend = () => { }; this.onError = () => { }; this.drawOverlay = () => { }; this.width = 0; this.height = 0; this.gpuErrors = []; this.fallbackReason = ''; this.texts = []; this.fallbackLines = []; this.fallbackTriangles = []; }
+        constructor(canvas, overlay, camera) { this.canvas = canvas; this.overlay = overlay; this.camera = camera; this.ctx = overlay.getContext('2d'); this.backend = 'Starting'; this.device = null; this.sceneKey = ''; this.gridKey = ''; this.origin = [0, 0, 0]; this.theme = 'dark'; this.style = 'wireframe'; this.grid = true; this.lineweights = false; this.stats = { segments: 0, triangles: 0, cpuMs: 0, drawCalls: 0 }; this.buffers = {}; this.onBackend = () => { }; this.onError = () => { }; this.drawOverlay = () => { }; this.width = 0; this.height = 0; this.gpuErrors = []; this.fallbackReason = ''; this.texts = []; this.fallbackLines = []; this.fallbackTriangles = []; this.selectionKey = ''; this.sceneLineCount = 0; this.sceneTriangleCount = 0; this.selectionLineCount = 0; this.selectionTriangleCount = 0; this.fallbackSelectionLines = []; this.fallbackSelectionTriangles = []; this.textsDirty = false; this.measureCtx = null; this.renderListKey = ''; this.renderEntries = []; this.lastFont = ''; }
         async init(forceFallback = false) {
             if (!forceFallback && navigator.gpu) {
                 try {
@@ -134,30 +134,71 @@
         else
             entry.count = array.length / stride; if (array.length)
             this.device.queue.writeBuffer(this.buffers[name].buffer, 0, array); }
+        renderList(doc) {
+            const key = doc.id + ':' + doc.revision;
+            if (this.renderListKey !== key) {
+                this.renderListKey = key;
+                this.renderEntries = K.Production?.renderEntities ? K.Production.renderEntities(doc) : doc.entities.map(e=>({e,owner:e.id}));
+            }
+            return this.renderEntries;
+        }
+        measureText(t) {
+            // Cache string widths against a 100 px reference font directly on the
+            // text object; the render loop then only rescales them by px / 100.
+            const text = t.text || '', family = t.fontFamily || '';
+            if (t.composition || (t.widths100 && t.widths100.text === text && t.widths100.family === family))
+                return;
+            if (!this.measureCtx)
+                this.measureCtx = document.createElement('canvas').getContext('2d');
+            const m = this.measureCtx;
+            m.font = (t.fontFamily ? (t.italic ? 'italic ' : '') + (t.bold ? 'bold ' : '') : '') + '100px ' + (family || '"Segoe UI", Arial, sans-serif');
+            const widths = text.split('\n').map(line => m.measureText(line).width);
+            // Non-enumerable so cached metrics never leak into serialized entities.
+            Object.defineProperty(t, 'widths100', { value: { text, family, widths }, writable: true, enumerable: false, configurable: true });
+        }
+        expand(buf, need) { let cap = buf.length * 2; while (cap < need)
+            cap *= 2; const next = new Float32Array(cap); next.set(buf); return next; }
         buildScene(doc) {
-            const key = [doc.id, doc.revision, [...doc.selection].sort().join(','), this.style, this.theme, this.lineweights].join(':');
+            const key = [doc.id, doc.revision, this.style, this.theme, this.lineweights].join(':');
             if (key === this.sceneKey)
                 return;
             this.sceneKey = key;
             this.origin = this.camera.target.slice();
             this.gridKey = '';
-            const lines = [], triangles = [];
+            this.selectionKey = '';
+            this.textsDirty = true;
+            const ox = this.origin[0], oy = this.origin[1], oz = this.origin[2], fallback = !this.device;
+            let lines = new Float32Array(8192), lineOffset = 0, triangles = new Float32Array(8192), triOffset = 0;
             this.texts = [];
-            this.fallbackLines = [];
-            this.fallbackTriangles = [];
-            const addLine = (s, color, width, dash) => { lines.push(...V.sub(s[0], this.origin), ...V.sub(s[1], this.origin), ...color, width, dash); this.fallbackLines.push({ s, color, width, dash }); };
+            if (fallback) {
+                this.fallbackLines = [];
+                this.fallbackTriangles = [];
+            }
+            const addLine = (s, color, width, dash) => {
+                if (lineOffset + 12 > lines.length)
+                    lines = this.expand(lines, lineOffset + 12);
+                const a = s[0], b = s[1], o = lineOffset;
+                lines[o] = a[0] - ox; lines[o + 1] = a[1] - oy; lines[o + 2] = a[2] - oz;
+                lines[o + 3] = b[0] - ox; lines[o + 4] = b[1] - oy; lines[o + 5] = b[2] - oz;
+                lines[o + 6] = color[0]; lines[o + 7] = color[1]; lines[o + 8] = color[2]; lines[o + 9] = color[3];
+                lines[o + 10] = width; lines[o + 11] = dash;
+                lineOffset += 12;
+                if (fallback)
+                    this.fallbackLines.push({ s, color, width, dash });
+            };
             let triCount = 0, entityCount = 0;
-            const renderEntities = K.Production?.renderEntities ? K.Production.renderEntities(doc) : doc.entities.map(e=>({e,owner:e.id}));
-            for (const {e, owner} of renderEntities) {
+            for (const {e, owner} of this.renderList(doc)) {
                 if (!doc.visible(e))
                     continue;
                 entityCount++;
-                const g = doc.geometry(e), layer = doc.layer(e), selected = doc.selection.has(owner), locked = layer.locked;
+                const g = doc.geometry(e), layer = doc.layer(e), isMesh = e.type === 'MESH',
+                    linetype = e.linetype === 'ByLayer' || !e.linetype ? layer.linetype : e.linetype,
+                    dash = /center/i.test(linetype) ? 2 : /dash/i.test(linetype) ? 1 : 0,
+                    width = this.lineweights ? Math.max(.8, (e.lineweight || layer.lineweight || .25) * 4) : isMesh ? .75 : 1.05;
                 const raw = e.color && !['bylayer','byblock'].includes(e.color) ? e.color : layer.color, col = displayColor(raw, this.theme);
-                let color = rgba(selected ? '#63d7eb' : col, locked ? .42 : 1);
-                const isMesh = e.type === 'MESH', linetype = e.linetype === 'ByLayer' || !e.linetype ? layer.linetype : e.linetype, dash = /center/i.test(linetype) ? 2 : /dash/i.test(linetype) ? 1 : 0, width = selected ? 2.1 : this.lineweights ? Math.max(.8, (e.lineweight || layer.lineweight || .25) * 4) : isMesh ? .75 : 1.05;
+                const color = rgba(col, layer.locked ? .42 : 1);
                 if (!(isMesh && this.style === 'shaded')) {
-                    const edgeColor = isMesh && this.style !== 'wireframe' && !selected ? rgba(this.theme === 'dark' ? '#13222e' : '#314958', .62) : color;
+                    const edgeColor = isMesh && this.style !== 'wireframe' ? rgba(this.theme === 'dark' ? '#13222e' : '#314958', .62) : color;
                     for (const s of (isMesh && this.style === 'wireframe' ? g.wireSegments || g.segments || [] : g.segments || []))
                         addLine(s, edgeColor, width, dash);
                 }
@@ -166,20 +207,111 @@
                     if (this.style === 'xray' && isMesh)
                         fillColor[3] = .25;
                     for (const t of g.triangles) {
-                        for (let j = 0; j < 3; j++)
-                            triangles.push(...V.sub(t.points[j], this.origin), ...(t.normals?.[j] || t.normal), ...fillColor);
-                        this.fallbackTriangles.push({ points: t.points, normal: t.normal, color: fillColor });
+                        if (triOffset + 30 > triangles.length)
+                            triangles = this.expand(triangles, triOffset + 30);
+                        const normals = t.normals;
+                        let o = triOffset;
+                        for (let j = 0; j < 3; j++) {
+                            const p = t.points[j], n = normals?.[j] || t.normal;
+                            triangles[o] = p[0] - ox; triangles[o + 1] = p[1] - oy; triangles[o + 2] = p[2] - oz;
+                            triangles[o + 3] = n[0]; triangles[o + 4] = n[1]; triangles[o + 5] = n[2];
+                            triangles[o + 6] = fillColor[0]; triangles[o + 7] = fillColor[1]; triangles[o + 8] = fillColor[2]; triangles[o + 9] = fillColor[3];
+                            o += 10;
+                        }
+                        triOffset += 30;
+                        if (fallback)
+                            this.fallbackTriangles.push({ points: t.points, normal: t.normal, color: fillColor });
                         triCount++;
                     }
                 }
-                for (const t of g.texts || [])
-                    this.texts.push({ t, color: selected ? '#63d7eb' : col, alpha: locked ? .4 : 1, dimension: e.type === 'DIMENSION', selected });
+                for (const t of g.texts || []) {
+                    this.measureText(t);
+                    this.texts.push({ t, color: col, baseColor: col, alpha: layer.locked ? .4 : 1, dimension: e.type === 'DIMENSION', selected: false, owner });
+                }
             }
-            this.stats.segments = lines.length / 12;
-            this.stats.triangles = triCount;
+            this.sceneLineCount = lineOffset / 12;
+            this.sceneTriangleCount = triCount;
+            this.stats.segments = this.sceneLineCount + this.selectionLineCount;
+            this.stats.triangles = triCount + this.selectionTriangleCount;
             this.stats.entities = entityCount;
-            this.upload('scene-lines', new Float32Array(lines), 12);
-            this.upload('scene-triangles', new Float32Array(triangles), 10);
+            this.upload('scene-lines', lines.subarray(0, lineOffset), 12);
+            this.upload('scene-triangles', triangles.subarray(0, triOffset), 10);
+        }
+        buildSelection(doc) {
+            const key = [doc.id, doc.revision, [...doc.selection].sort().join(','), this.theme].join(':');
+            const rebuild = key !== this.selectionKey;
+            // Annotation highlight colors track the selection even when the cached
+            // buffers from the previous frame are still valid.
+            if (rebuild || this.textsDirty) {
+                for (const entry of this.texts) {
+                    const on = doc.selection.has(entry.owner);
+                    entry.color = on ? '#63d7eb' : entry.baseColor;
+                    entry.selected = on;
+                }
+                this.textsDirty = false;
+            }
+            if (!rebuild)
+                return;
+            this.selectionKey = key;
+            const ox = this.origin[0], oy = this.origin[1], oz = this.origin[2], fallback = !this.device;
+            let lines = new Float32Array(2048), lineOffset = 0, triangles = new Float32Array(2048), triOffset = 0;
+            const selLines = fallback ? [] : null, selTriangles = fallback ? [] : null;
+            const addLine = (s, color, width, dash) => {
+                if (lineOffset + 12 > lines.length)
+                    lines = this.expand(lines, lineOffset + 12);
+                const a = s[0], b = s[1], o = lineOffset;
+                lines[o] = a[0] - ox; lines[o + 1] = a[1] - oy; lines[o + 2] = a[2] - oz;
+                lines[o + 3] = b[0] - ox; lines[o + 4] = b[1] - oy; lines[o + 5] = b[2] - oz;
+                lines[o + 6] = color[0]; lines[o + 7] = color[1]; lines[o + 8] = color[2]; lines[o + 9] = color[3];
+                lines[o + 10] = width; lines[o + 11] = dash;
+                lineOffset += 12;
+                if (fallback)
+                    selLines.push({ s, color, width, dash });
+            };
+            let triCount = 0;
+            for (const {e, owner} of this.renderList(doc)) {
+                if (!doc.selection.has(owner) || !doc.visible(e))
+                    continue;
+                const g = doc.geometry(e), layer = doc.layer(e), isMesh = e.type === 'MESH',
+                    linetype = e.linetype === 'ByLayer' || !e.linetype ? layer.linetype : e.linetype,
+                    dash = /center/i.test(linetype) ? 2 : /dash/i.test(linetype) ? 1 : 0;
+                const color = rgba('#63d7eb', layer.locked ? .42 : 1);
+                if (!(isMesh && this.style === 'shaded'))
+                    for (const s of (isMesh && this.style === 'wireframe' ? g.wireSegments || g.segments || [] : g.segments || []))
+                        addLine(s, color, 2.1, dash);
+                if (!isMesh || this.style !== 'wireframe') {
+                    const fillColor = color.slice();
+                    if (this.style === 'xray' && isMesh)
+                        fillColor[3] = .25;
+                    for (const t of g.triangles) {
+                        if (triOffset + 30 > triangles.length)
+                            triangles = this.expand(triangles, triOffset + 30);
+                        const normals = t.normals;
+                        let o = triOffset;
+                        for (let j = 0; j < 3; j++) {
+                            const p = t.points[j], n = normals?.[j] || t.normal;
+                            triangles[o] = p[0] - ox; triangles[o + 1] = p[1] - oy; triangles[o + 2] = p[2] - oz;
+                            triangles[o + 3] = n[0]; triangles[o + 4] = n[1]; triangles[o + 5] = n[2];
+                            triangles[o + 6] = fillColor[0]; triangles[o + 7] = fillColor[1]; triangles[o + 8] = fillColor[2]; triangles[o + 9] = fillColor[3];
+                            o += 10;
+                        }
+                        triOffset += 30;
+                        if (fallback)
+                            selTriangles.push({ points: t.points, normal: t.normal, color: fillColor });
+                        triCount++;
+                    }
+                }
+            }
+            this.selectionLineCount = lineOffset / 12;
+            this.selectionTriangleCount = triCount;
+            this.stats.segments = this.sceneLineCount + this.selectionLineCount;
+            this.stats.triangles = this.sceneTriangleCount + triCount;
+            if (fallback) {
+                this.fallbackSelectionLines = selLines;
+                this.fallbackSelectionTriangles = selTriangles;
+            }
+            this.upload('selection-lines', lines.subarray(0, lineOffset), 12);
+            this.upload('selection-triangles', triangles.subarray(0, triOffset), 10);
         }
         gridSpacing() { const zoom = this.camera.zoom; let s = 10 ** Math.floor(Math.log10(28 / Math.max(zoom, 1e-9))); if (s * zoom < 14)
             s *= 2; if (s * zoom < 14)
@@ -211,10 +343,10 @@
             this.upload('grid-lines', new Float32Array(arr), 12);
         }
         render(doc) { const start = performance.now(); if (!this.width || !this.height)
-            return; this.buildScene(doc); this.buildGrid(); if (this.device)
+            return; this.buildScene(doc); this.buildSelection(doc); this.buildGrid(); if (this.device)
             this.drawGPU();
         else {
-            const key = this.sceneKey + ':' + this.gridKey + ':' + this.camera.revision;
+            const key = this.sceneKey + ':' + this.selectionKey + ':' + this.gridKey + ':' + this.camera.revision;
             if (this.canvasFrameKey !== key) {
                 this.drawCanvas();
                 this.canvasFrameKey = key;
@@ -244,7 +376,17 @@
                 pass.draw(tri.count);
                 calls++;
             }
+            // Selection overlays the retained scene: the depth-equal, non-writing
+            // mesh pipeline repaints selected faces, then highlighted edges go last.
+            const selTri = this.buffers['selection-triangles'];
+            if (selTri?.count) {
+                pass.setPipeline(this.xrayPipeline);
+                pass.setVertexBuffer(0, selTri.buffer);
+                pass.draw(selTri.count);
+                calls++;
+            }
             lines('scene-lines');
+            lines('selection-lines');
             pass.end();
             d.queue.submit([encoder.finish()]);
             this.stats.drawCalls = calls;
@@ -315,7 +457,7 @@
             };
             for (const l of this.gridLines)
                 drawLine(l);
-            const triangles = (this.fallbackTriangles || []).map(t => ({ ...t, p: t.points.map(p => this.camera.project(p)) })).filter(t => t.p.every(p => p[2] >= 0 && p[2] <= 1)).sort((a, b) => b.p.reduce((s, p) => s + p[2], 0) - a.p.reduce((s, p) => s + p[2], 0));
+            const triangles = (this.fallbackTriangles || []).concat(this.fallbackSelectionTriangles || []).map(t => ({ ...t, p: t.points.map(p => this.camera.project(p)) })).filter(t => t.p.every(p => p[2] >= 0 && p[2] <= 1)).sort((a, b) => b.p.reduce((s, p) => s + p[2], 0) - a.p.reduce((s, p) => s + p[2], 0));
             let depth = null, image = null;
             if (triangles.length && this.style !== 'wireframe' && this.style !== 'xray') {
                 // A full-resolution software depth/color pass avoids painter-order
@@ -371,20 +513,65 @@
             if (image) c.putImageData(image, 0, 0);
             for (const l of this.fallbackLines || [])
                 drawLine(l, depth);
+            for (const l of this.fallbackSelectionLines || [])
+                drawLine(l, depth);
             c.setLineDash([]);
             this.stats.drawCalls = 0;
         }
+        inView(minX, maxX, minY, maxY, margin) {
+            return !(maxX + margin < 0 || minX - margin > this.width || maxY + margin < 0 || minY - margin > this.height);
+        }
+        visibleComposition(t) {
+            // Early frustum culling for MText: project the composition background
+            // bounds once instead of drawing every run and rule line off screen.
+            const comp = t.composition;
+            if (!comp)
+                return true;
+            const pad = (t.background?.padding ?? .2) * (t.height || 10);
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, behind = 0;
+            for (const [u, v] of [[-pad, -pad], [comp.width + pad, -pad], [comp.width + pad, comp.height + pad], [-pad, comp.height + pad]]) {
+                const q = this.camera.project(comp.world(u, v));
+                if (q[2] < 0)
+                    behind++;
+                if (q[0] < minX)
+                    minX = q[0];
+                if (q[0] > maxX)
+                    maxX = q[0];
+                if (q[1] < minY)
+                    minY = q[1];
+                if (q[1] > maxY)
+                    maxY = q[1];
+            }
+            return behind < 4 && this.inView(minX, maxX, minY, maxY, 8);
+        }
+        fontsTextVisible(t) {
+            // Early frustum culling for laid-out font runs, before drawText does
+            // any transform, letterSpacing and glyph work.
+            const p = this.camera.project(t.position);
+            if (p[2] < 0 || p[2] > 1)
+                return false;
+            const hh = t.height || 10, ax = K.Geo.textAxes(t);
+            const x = this.camera.project(V.add(t.position, V.mul(ax.x, hh)));
+            const em = Math.hypot(x[0] - p[0], x[1] - p[1]);
+            if (em < 1)
+                return false;
+            const w100 = t.widths100?.widths?.[0] || 0;
+            const adv = w100 * em / 100 * Math.abs((t.widthFactor ?? 1) * (t.backwards ? -1 : 1));
+            const dx = x[0] - p[0], dy = x[1] - p[1], len = Math.hypot(dx, dy) || 1;
+            const endX = p[0] + dx / len * adv, endY = p[1] + dy / len * adv;
+            return this.inView(Math.min(p[0], endX), Math.max(p[0], endX), Math.min(p[1], endY), Math.max(p[1], endY), em * 1.6);
+        }
         drawAnnotations() {
-            const c = this.ctx;
+            const c = this.ctx, baseAlign = c.textAlign, baseBaseline = c.textBaseline;
             c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
             c.clearRect(0, 0, this.width, this.height);
             c.lineJoin = 'round';
             c.lineCap = 'round';
             for (const { t, color, alpha, dimension, selected } of this.texts || []) {
-                if(t.composition && K.MText){K.MText.draw(c,t,p=>this.camera.project(p),color,alpha,this.theme,selected);continue;}
-                if(K.Fonts && t.fontFamily){K.Fonts.drawText(c,t,p=>this.camera.project(p),color,alpha);continue;}
+                if(t.composition && K.MText){if(this.visibleComposition(t))K.MText.draw(c,t,p=>this.camera.project(p),color,alpha,this.theme,selected);continue;}
+                if(K.Fonts && t.fontFamily){if(this.fontsTextVisible(t))K.Fonts.drawText(c,t,p=>this.camera.project(p),color,alpha);continue;}
                 const p = this.camera.project(t.position);
-                if (p[2] < 0 || p[2] > 1 || p[0] < -500 || p[0] > this.width + 500 || p[1] < -200 || p[1] > this.height + 200)
+                if (p[2] < 0 || p[2] > 1)
                     continue;
                 const axes = K.Geo.textAxes(t), h = t.height || 10, q = this.camera.project(V.add(t.position, V.mul(axes.x, h))), r = this.camera.project(V.add(t.position, V.mul(axes.y, h)));
                 const px = Math.hypot(q[0] - p[0], q[1] - p[1]);
@@ -399,24 +586,44 @@
                     yx = -yx;
                     yy = -yy;
                 }
-                c.save();
-                c.translate(p[0], p[1]);
-                c.transform(xx, xy, yx, yy, 0, 0);
-                c.font = `${px}px "Segoe UI", Arial, sans-serif`;
+                // Extent-based frustum culling from the cached 100 px reference widths.
+                const widths = t.widths100?.widths || [0], scale = px / 100;
+                let widest = 0;
+                for (const cw of widths)
+                    if (cw > widest)
+                        widest = cw;
+                widest *= scale;
+                const span = widths.length * px * 1.35 + px, endX = p[0] + xx * widest, endY = p[1] + xy * widest;
+                if (!this.inView(Math.min(p[0] - xx * widest, endX), Math.max(p[0] - xx * widest, endX), Math.min(p[1] - xy * widest, endY), Math.max(p[1] - xy * widest, endY), span))
+                    continue;
+                // The text-local transform is composed by hand, so no save()/restore() is needed.
+                c.setTransform(this.dpr * xx, this.dpr * xy, this.dpr * yx, this.dpr * yy, this.dpr * p[0], this.dpr * p[1]);
+                const font = `${px}px "Segoe UI", Arial, sans-serif`;
+                if (this.lastFont !== font) {
+                    c.font = font;
+                    this.lastFont = font;
+                }
                 c.textAlign = t.align || 'left';
                 c.textBaseline = 'alphabetic';
                 c.globalAlpha = alpha;
                 c.fillStyle = color;
-                const lines = (t.text || '').split('\n');
-                lines.forEach((line, i) => { if (dimension) {
-                    const m = c.measureText(line), x = t.align === 'center' ? -m.width / 2 : t.align === 'right' ? -m.width : 0;
-                    c.save();
-                    c.fillStyle = this.theme === 'light' ? '#edf2f6' : '#121c29';
-                    c.fillRect(x - px * .2, i * px * 1.35 - px * .85, m.width + px * .4, px * 1.2);
-                    c.restore();
-                } c.fillText(line, 0, i * px * 1.35); });
-                c.restore();
+                const lines = (t.text || '').split('\n'), bg = this.theme === 'light' ? '#edf2f6' : '#121c29';
+                lines.forEach((line, i) => {
+                    const mw = widths[i] * scale;
+                    if (dimension) {
+                        const x = t.align === 'center' ? -mw / 2 : t.align === 'right' ? -mw : 0;
+                        c.fillStyle = bg;
+                        c.fillRect(x - px * .2, i * px * 1.35 - px * .85, mw + px * .4, px * 1.2);
+                        c.fillStyle = color;
+                    }
+                    c.fillText(line, 0, i * px * 1.35);
+                });
             }
+            c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+            c.globalAlpha = 1;
+            c.textAlign = baseAlign;
+            c.textBaseline = baseBaseline;
+            this.lastFont = '';
             this.drawUCS(c);
         }
         drawUCS(c) { const x = 40, y = this.height - 37, cam = this.camera, axes = [[[1, 0, 0], 'X', '#d17f88'], [[0, 1, 0], 'Y', '#79b89e'], [[0, 0, 1], 'Z', '#7eabdf']]; c.save(); c.lineWidth = 1.7; c.font = '10px "Segoe UI",sans-serif'; for (const [v, label, color] of axes) {
