@@ -257,6 +257,8 @@ with sync_playwright() as p:
     test('native project file input restores the complete drawing',native_file)
     def dwg_mislabeled_dxf():
         import shutil, subprocess
+        if not os.environ.get('KESTREL_TEST_URL'):
+            return 'skipped (DWG codec bridge requires the local server, not standalone HTML)'
         exe = shutil.which('dxf2dwg')
         if not exe:
             return 'skipped (no dxf2dwg converter on PATH)'

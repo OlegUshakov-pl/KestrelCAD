@@ -72,6 +72,16 @@ test('DXF imports layer on/off state from the layer table',()=>{const text='0\nS
 test('SVG escapes text and attribute values',()=>{const d=drawing([{type:'TEXT',position:[0,0,0],text:'<script>alert("x")</script> &',height:4}]);const svg=X.writeSVG(d);assert.ok(!svg.includes('<script>'));assert.ok(svg.includes('&lt;script&gt;'));assert.ok(svg.includes('viewBox="0 0 1600 1000"'));});
 test('both example projects validate and export',()=>{for(const [name,doc]of [['courtyard',K.Examples.courtyard()],['fixture',K.Examples.fixture()]]){K.Drawing.from(doc.serialize());const text=X.writeDXF(doc),parsed=X.parseDXF(text);assert.deepEqual(parsed.report.skipped,{});K.Drawing.from(parsed.data);fs.writeFileSync(path.join(__dirname,'..','examples',name+'.kcad'),JSON.stringify(doc.serialize()));fs.writeFileSync(path.join(__dirname,'..','examples',name+'.dxf'),text);}});
 
-if(fs.existsSync(path.join(__dirname,'fixtures','external.dxf')))test('independent producer DXF imports valid geometry',()=>{const r=X.parseDXF(fs.readFileSync(path.join(__dirname,'fixtures','external.dxf')));const d=K.Drawing.from(r.data);assert.ok(d.entities.length>20);fs.writeFileSync(path.join(__dirname,'results','external-import.json'),JSON.stringify({data:d.serialize(),report:r.report},null,2));});
+if(fs.existsSync(path.join(__dirname,'fixtures','external.dxf')))test('independent producer DXF imports valid geometry',()=>{
+    // The block-limit test above loads production.js globally. The independent
+    // DXF audit expects INSERTs expanded into editable geometry, so keep this
+    // import in the non-production mode used by the plain exchange parser.
+    const hadProduction=K.Production;K.Production=undefined;
+    try{
+        const r=X.parseDXF(fs.readFileSync(path.join(__dirname,'fixtures','external.dxf')));
+        const d=K.Drawing.from(r.data);assert.ok(d.entities.length>20);
+        fs.writeFileSync(path.join(__dirname,'results','external-import.json'),JSON.stringify({data:d.serialize(),report:r.report},null,2));
+    }finally{K.Production=hadProduction;}
+});
 fs.writeFileSync(path.join(__dirname,'results','core-results.json'),JSON.stringify({suite:'dependency-free Node core tests',passed:results.length-failures,failed:failures,tests:results},null,2));
 console.log(`\n${results.length-failures}/${results.length} tests passed.`);process.exitCode=failures?1:0;

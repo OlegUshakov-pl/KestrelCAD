@@ -53,7 +53,12 @@ with sync_playwright() as p:
         page.evaluate("kestrel.doc.transaction('edit fixture endpoint',()=>{kestrel.doc.entities[0].points[1][0]=60;})");eq('kestrel.doc.geometry(kestrel.doc.entities[1]).texts[0].text','60.00')
     test('DIMLINEAR and associative updates do not use aligned distance',linear)
     def dimmodes():
-        fresh();action('dim-radius');submit({'a':'0,0,0','b':'3,4,0'});eq('kestrel.doc.geometry(kestrel.doc.entities[0]).texts[0].text','R5.00');action('dim-angular');submit({'a':'0,0,0','b':'20,0,0','c':'0,20,0'});eq('kestrel.doc.geometry(kestrel.doc.entities[1]).texts[0].text','90.00°')
+        # Production dimension dialogs need a selected non-line entity; without
+        # one the commands fall back to the interactive pick/point workflow.
+        fresh();command('CIRCLE 0,0 5');select([0]);action('dim-radius');submit({'a':'0,0,0','b':'3,4,0'})
+        eq('kestrel.doc.entities[1].kind','radius');eq('kestrel.doc.geometry(kestrel.doc.entities[1]).texts[0].text','R5.00')
+        action('dim-angular');submit({'a':'0,0,0','b':'20,0,0','c':'0,20,0'})
+        eq('kestrel.doc.entities[2].kind','angular');eq('kestrel.doc.geometry(kestrel.doc.entities[2]).texts[0].text','90.00°')
     test('radial and angular dimensions through dialogs',dimmodes)
     def table():
         fresh();action('table');submit({'cells':'[["Part","Qty"],["Plate","2"]]'});eq('kestrel.doc.entities[0].cells[1][1]','2');select([0]);action('table');submit({'cells':'[["Part","Qty"],["Plate","7"]]'});eq('kestrel.doc.entities[0].cells[1][1]','7');action('undo');eq('kestrel.doc.entities[0].cells[1][1]','2')

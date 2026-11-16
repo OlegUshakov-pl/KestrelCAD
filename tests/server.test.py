@@ -41,11 +41,17 @@ def request(path='/', method='GET', body=None, headers=None):
     with response:
         return response.status, response.read(), dict(response.headers)
 
+class Skipped(Exception):
+    pass
+
 def test(name, fn):
     try:
         fn()
         results.append({'name': name, 'status': 'passed'})
         print('PASS', name, flush=True)
+    except Skipped as error:
+        results.append({'name': name, 'status': 'skipped', 'detail': str(error)})
+        print('SKIP', name, str(error), flush=True)
     except Exception as error:
         results.append({'name': name, 'status': 'failed', 'error': repr(error)})
         print('FAIL', name, repr(error), flush=True)
@@ -77,7 +83,10 @@ def no_symlink_escape():
         secret.write_text('not exposed')
         link = ROOT / 'tests' / '_escape_test.txt'
         try:
-            link.symlink_to(secret)
+            try:
+                link.symlink_to(secret)
+            except OSError as error:
+                raise Skipped(f'symlink creation not permitted here ({error})') from error
             eq(request('/tests/_escape_test.txt')[0], 403)
         finally:
             link.unlink(missing_ok=True)
