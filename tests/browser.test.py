@@ -149,6 +149,26 @@ with sync_playwright() as p:
     def trim():
         fresh();command('L 0,0 100,0 ENTER');command('L 25,-30 25,30 ENTER');command('L 75,-30 75,30 ENTER');fit();action('trim');click_world([50,0,0]);page.keyboard.press('Escape');eq(count(),4);lengths=state("kestrel.doc.entities.filter(e=>Math.abs(e.points[0][1])<1e-8&&Math.abs(e.points[1][1])<1e-8).map(e=>Kestrel.Math.V.dist(...e.points))");eq(len(lengths),2);near(sum(lengths),50)
     test('trim removes a bounded interval and preserves both line remainders',trim)
+    def trim_spline_imported_knots():
+        fresh()
+        # DXF/imported splines keep their original knot domain (here 0..10),
+        # while tessellation sample indices are normalized — the cut must be
+        # converted back to the knot domain before splitting.
+        page.evaluate("""()=>{
+          kestrel.doc.add({type:'SPLINE',controlPoints:[[0,0,0],[25,40,0],[50,-40,0],[75,40,0],[100,0,0]],
+            degree:3,knots:Kestrel.Geo.uniformKnots(5,3).map(k=>k*10)});
+          kestrel.doc.add({type:'LINE',points:[[34,-100,0],[34,100,0]]});
+          kestrel.doc.add({type:'LINE',points:[[66,-100,0],[66,100,0]]});
+          kestrel.refresh();}""")
+        fit();action('trim')
+        mid=state('Kestrel.Geo.nurbs(kestrel.doc.entities[0],0.5)')
+        click_world(mid);page.keyboard.press('Escape')
+        eq(count(),4)
+        parts=state("kestrel.doc.entities.filter(e=>e.type==='SPLINE').map(e=>({n:e.controlPoints.length,lo:e.knots[0],hi:e.knots[e.knots.length-1]}))")
+        eq(len(parts),2)
+        for part in parts:
+            assert part['n']>=2 and part['lo']>=-1e-9 and part['hi']<=10+1e-9,part
+    test('trim splits an imported spline with a non-unit knot domain',trim_spline_imported_knots)
     def extend():
         fresh();command('L 0,0 50,0 ENTER');command('L 100,-20 100,20 ENTER');fit();action('extend');click_world([48,0,0]);page.keyboard.press('Escape');near(state('kestrel.doc.entities[0].points[1][0]'),100)
     test('extend reaches an intersecting line boundary',extend)

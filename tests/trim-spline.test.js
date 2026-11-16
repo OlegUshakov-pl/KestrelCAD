@@ -146,4 +146,50 @@ test('quadratic spline trims too', () => {
     assert.equal(app.added[0].degree, 2, 'degree kept');
 });
 
+// Imported splines often carry knots outside [0,1] (DXF group 40 is verbatim).
+// Sample indices are normalized parameters, so the split must convert them
+// back to the spline's actual knot domain before inserting knots.
+const knotDomainCases = [
+    ['scaled 0..10', G.uniformKnots(5, 3).map(k => k * 10), 0, 10],
+    ['shifted 5..15', G.uniformKnots(5, 3).map(k => k * 10 + 5), 5, 15],
+];
+for (const [label, knots, lo, hi] of knotDomainCases) {
+    test(label + ' knot domain trims at the clicked interval', () => {
+        const s = { ...S, knots: knots.slice() };
+        const t0 = 0.3, t1 = 0.7;
+        const app = mock([s, verticalLine(evalAt(s, t0)[0]), verticalLine(evalAt(s, t1)[0])]);
+        const mid = evalAt(s, 0.5);
+        app.trimExtend(s, [mid[0], mid[1], 0], false, []);
+        assert.equal(app.added.length, 2, 'two pieces expected');
+        const [a, b] = app.added;
+        for (const p of [a, b]) {
+            assert.equal(p.type, 'SPLINE');
+            assert.equal(p.knots.length, p.controlPoints.length + p.degree + 1);
+            assert.ok(p.knots.every((k, i) => i === 0 || k >= p.knots[i - 1] - 1e-9), 'knots monotone: ' + p.knots);
+            assert.ok(p.knots[0] >= lo - 1e-9 && p.knots[p.knots.length - 1] <= hi + 1e-9,
+                'knots stay in the original domain: ' + p.knots);
+        }
+        assert.ok(V.dist(evalAt(a, 1), evalAt(s, t0)) < 0.5, 'left piece ends at the first cut');
+        assert.ok(V.dist(evalAt(b, 0), evalAt(s, t1)) < 0.5, 'right piece starts at the second cut');
+        assert.ok(V.dist(evalAt(a, 0), evalAt(s, 0)) < 1e-6, 'left piece keeps spline start');
+        assert.ok(V.dist(evalAt(b, 1), evalAt(s, 1)) < 1e-6, 'right piece keeps spline end');
+    });
+}
+
+test('rational spline with non-unit knot domain keeps weights consistent', () => {
+    const knots = G.uniformKnots(5, 3).map(k => k * 20 + 3);
+    const s = { ...S, knots, weights: [1, 2, 1, 2, 1] };
+    const t0 = 0.4, t1 = 0.7;
+    const app = mock([s, verticalLine(evalAt(s, t0)[0]), verticalLine(evalAt(s, t1)[0])]);
+    const mid = evalAt(s, 0.55);
+    app.trimExtend(s, [mid[0], mid[1], 0], false, []);
+    assert.equal(app.added.length, 2, 'two pieces expected');
+    for (const p of app.added) {
+        assert.equal(p.weights.length, p.controlPoints.length, 'weights carried over');
+        assert.ok(p.weights.every(w => Number.isFinite(w) && w > 0), 'positive weights');
+    }
+    assert.ok(V.dist(evalAt(app.added[0], 1), evalAt(s, t0)) < 0.5, 'left piece ends at the cut');
+    assert.ok(V.dist(evalAt(app.added[1], 0), evalAt(s, t1)) < 0.5, 'right piece starts at the cut');
+});
+
 console.log('\ntrim spline: ' + pass + ' passed');

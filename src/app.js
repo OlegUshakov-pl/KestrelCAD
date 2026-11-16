@@ -2663,6 +2663,17 @@
                     return [c[0] * w, c[1] * w, (c[2] || 0) * w, w];
                 });
                 const K0 = entity.knots?.length === cps.length + degree + 1 ? entity.knots.slice() : G.uniformKnots(cps.length, degree);
+                // G.nurbs evaluates the active knot domain [K0[degree], K0[n]],
+                // not necessarily [0,1]: DXF and imported splines frequently
+                // use another domain. Sample indices map to a normalized
+                // parameter, so convert it back to this domain before knot
+                // insertion — otherwise the cut lands at the wrong place and
+                // the resulting knot vectors are invalid.
+                const uMin = K0[degree], uMax = K0[cps.length];
+                if (!(uMax > uMin))
+                    throw Error('Invalid spline knot domain.');
+                const uEPS = Math.max(1e-9, (Math.abs(uMin) + Math.abs(uMax) + 1) * 1e-12);
+                const knotAt = t => uMin + (uMax - uMin) * t;
                 const dense = G.path(entity, .5);
                 if (dense.length < 2)
                     return;
@@ -2707,18 +2718,19 @@
                         high = values[i + 1];
                         break;
                     }
-                // Dense samples sit at uniform parameter steps, so a global
-                // index maps to the curve parameter index / N.
+                // Dense samples sit at uniform normalized-parameter steps, so
+                // a global index maps to index / N; convert that to the knot
+                // domain for the split.
                 const kept = [];
                 if (low > 1e-6)
-                    kept.push([0, low / N]);
+                    kept.push([uMin, knotAt(low / N)]);
                 if (high < N - 1e-6)
-                    kept.push([high / N, 1]);
+                    kept.push([knotAt(high / N), uMax]);
                 // Boehm knot insertion until u has multiplicity `degree`, then
                 // the curve divides into left/right control polygons at u.
                 const insertTo = (H, K, u) => {
                     let h = H, kts = K;
-                    for (let count = kts.reduce((s, k) => s + (Math.abs(k - u) < 1e-9 ? 1 : 0), 0); count < degree; count++) {
+                    for (let count = kts.reduce((s, k) => s + (Math.abs(k - u) < uEPS ? 1 : 0), 0); count < degree; count++) {
                         let k = degree;
                         while (k < h.length - 1 && kts[k + 1] <= u)
                             k++;
@@ -2740,7 +2752,7 @@
                     }
                     let k = -1;
                     for (let i = 0; i < kts.length; i++)
-                        if (Math.abs(kts[i] - u) < 1e-9)
+                        if (Math.abs(kts[i] - u) < uEPS)
                             k = i;
                     const leftH = h.slice(0, k - degree + 1), rightH = h.slice(k - degree);
                     return [
@@ -2750,13 +2762,13 @@
                 };
                 const makePiece = (u0, u1) => {
                     let cur = { H: H0, K: K0 };
-                    if (u0 > 1e-9) {
+                    if (u0 > uMin + uEPS) {
                         const right = insertTo(cur.H, cur.K, u0)[1];
                         if (!right)
                             return null;
                         cur = right;
                     }
-                    if (u1 < 1 - 1e-9) {
+                    if (u1 < uMax - uEPS) {
                         const left = insertTo(cur.H, cur.K, u1)[0];
                         if (!left)
                             return null;
@@ -2781,10 +2793,8 @@
                         out.linetype = entity.linetype;
                     pieces.push(out);
                 }
-                if (!pieces.length) {
-                    this.doc.transaction('Trim spline', () => this.doc.remove([entity.id]));
-                    return;
-                }
+                if (!pieces.length)
+                    throw Error('Could not split the spline at the cutting intersections.');
                 this.doc.transaction('Trim spline', () => {
                     this.doc.remove([entity.id]);
                     for (const out of pieces)
