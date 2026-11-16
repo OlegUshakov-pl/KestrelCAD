@@ -1289,7 +1289,7 @@
             case 'offset': return t.source ? 'Click the side to place the offset' : 'Select an object to offset';
             case 'fillet':
             case 'chamfer': return t.source ? 'Select second line, near the end to retain' : 'Select first line, near the end to retain';
-            case 'trim': return 'Click the curve interval to trim (line, circle, arc)';
+            case 'trim': return 'Click the curve interval to trim (line, polyline, circle, arc)';
             case 'extend': return 'Click the line near the endpoint to extend';
             case 'hatch': return 'Select a closed boundary, or click inside it';
             case 'extrude': return 'Select a closed planar profile';
@@ -2514,7 +2514,135 @@
                     return;
                 }
             }
-            throw Error('This command edits LINE, CIRCLE and ARC entities. Explode a polyline first.');
+            if (entity.type === 'POLYLINE') {
+                // Trim the clicked polyline edge at its intersections, splitting
+                // the polyline into the remaining pieces (AutoCAD-style).
+                const closed = !!entity.closed, pts = entity.points, count = pts.length;
+                if (count < 2)
+                    return;
+                const bulged = (entity.bulges || []).some(b => Math.abs(b) > EPS);
+                let chain;
+                if (!bulged) {
+                    chain = closed
+                        ? pts.map((v, i) => [v, pts[(i + 1) % count]])
+                        : pts.slice(0, -1).map((v, i) => [v, pts[i + 1]]);
+                }
+                else {
+                    const dense = G.path(entity, .5);
+                    if (closed && dense.length > 1 && V.len(V.sub(dense[0], dense[dense.length - 1])) < 1e-6)
+                        dense.pop();
+                    chain = dense.slice(0, -1).map((v, i) => [v, dense[i + 1]]);
+                    if (closed)
+                        chain.push([dense[dense.length - 1], dense[0]]);
+                }
+                const N = chain.length;
+                if (N < 1)
+                    return;
+                let bestK = 0, bestT = 0, bestD = Infinity;
+                for (let i = 0; i < N; i++) {
+                    const sd = segmentDistance(p, chain[i][0], chain[i][1]);
+                    if (sd.d < bestD) {
+                        bestD = sd.d;
+                        bestK = i;
+                        bestT = sd.t;
+                    }
+                }
+                const clickGlobal = bestK + bestT, cuts = [];
+                for (const e of this.doc.entities) {
+                    if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id))
+                        continue;
+                    for (const s of this.doc.geometry(e).segments) {
+                        for (let i = 0; i < N; i++) {
+                            const a = chain[i][0], b = chain[i][1];
+                            if (Math.abs(s[0][2] - a[2]) > 1e-5 || Math.abs(s[1][2] - b[2]) > 1e-5)
+                                continue;
+                            const hit = lineIntersection(a, b, ...s);
+                            if (hit && hit.t > -EPS && hit.t < 1 + EPS && hit.u >= -EPS && hit.u <= 1 + EPS)
+                                cuts.push(i + Math.max(0, Math.min(1, hit.t)));
+                        }
+                    }
+                }
+                const uniq = [];
+                for (const c of cuts.sort((a, b) => a - b))
+                    if (!uniq.length || c - uniq[uniq.length - 1] > 1e-6)
+                        uniq.push(c);
+                const inner = uniq.filter(t => t > EPS && t < N - EPS);
+                if (!inner.length)
+                    throw Error('No cutting intersections on this polyline edge.');
+                const values = [0, ...inner, N];
+                let low = 0, high = N;
+                for (let i = 0; i < values.length - 1; i++)
+                    if (clickGlobal >= values[i] - EPS && clickGlobal <= values[i + 1] + EPS) {
+                        low = values[i];
+                        high = values[i + 1];
+                        break;
+                    }
+                const pointAt = x => {
+                    const i = Math.min(N - 1, Math.floor(x));
+                    return V.lerp(chain[i][0], chain[i][1], Math.max(0, Math.min(1, x - i)));
+                };
+                const dedupe = list => {
+                    const out = [];
+                    for (const v of list)
+                        if (!out.length || V.dist(out[out.length - 1], v) > 1e-9)
+                            out.push(v);
+                    return out;
+                };
+                const pieces = [];
+                if (closed) {
+                    // Removing a span of a closed ring leaves one open polyline
+                    // walking from the end of the span around to its start.
+                    const piece = [], kH = Math.min(N - 1, Math.floor(high));
+                    if (high < N - EPS)
+                        piece.push(pointAt(high));
+                    for (let i = kH; i < N; i++)
+                        piece.push(chain[i][1]);
+                    const kL = Math.min(N - 1, Math.floor(low));
+                    for (let i = 0; i <= kL; i++)
+                        piece.push(chain[i][0]);
+                    if (low - kL > EPS)
+                        piece.push(pointAt(low));
+                    if (dedupe(piece).length >= 3)
+                        pieces.push(dedupe(piece));
+                }
+                else {
+                    if (low > EPS) {
+                        const piece = [], k = Math.min(N - 1, Math.floor(low));
+                        for (let i = 0; i <= k; i++)
+                            piece.push(chain[i][0]);
+                        if (low - k > EPS)
+                            piece.push(pointAt(low));
+                        if (dedupe(piece).length >= 2)
+                            pieces.push(dedupe(piece));
+                    }
+                    if (high < N - EPS) {
+                        const piece = [pointAt(high)], k = Math.min(N - 1, Math.floor(high));
+                        for (let i = k; i < N; i++)
+                            piece.push(chain[i][1]);
+                        if (dedupe(piece).length >= 2)
+                            pieces.push(dedupe(piece));
+                    }
+                }
+                if (!pieces.length) {
+                    this.doc.transaction('Trim polyline', () => this.doc.remove([entity.id]));
+                    return;
+                }
+                this.doc.transaction('Trim polyline', () => {
+                    this.doc.remove([entity.id]);
+                    for (const points of pieces) {
+                        const out = { type: 'POLYLINE', points: points.map(v => v.slice()), closed: false, layer: entity.layer, color: entity.color };
+                        if (entity.lineweight)
+                            out.lineweight = entity.lineweight;
+                        if (entity.linetype)
+                            out.linetype = entity.linetype;
+                        if (entity.normal)
+                            out.normal = entity.normal.slice();
+                        this.doc.add(out);
+                    }
+                });
+                return;
+            }
+            throw Error('This command edits LINE, POLYLINE, CIRCLE and ARC entities.');
         }        entityGrips(e) {
             const result = [];
             if (e.points && ['LINE', 'POLYLINE', 'DIMENSION'].includes(e.type)) {
