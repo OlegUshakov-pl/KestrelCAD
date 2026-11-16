@@ -9027,7 +9027,7 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
             case 'offset': return t.source ? 'Click the side to place the offset' : 'Select an object to offset';
             case 'fillet':
             case 'chamfer': return t.source ? 'Select second line, near the end to retain' : 'Select first line, near the end to retain';
-            case 'trim': return 'Click the curve interval to trim (line, polyline, circle, arc)';
+            case 'trim': return 'Click the curve interval to trim (line, polyline, spline, circle, arc)';
             case 'extend': return 'Click the line near the endpoint to extend';
             case 'hatch': return 'Select a closed boundary, or click inside it';
             case 'extrude': return 'Select a closed planar profile';
@@ -10078,6 +10078,10 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
             return M.around(base, M.multiply(M.rotation(a), M.multiply(M.scale(1, -1, 1), M.rotation(-a))));
         } return null; }
         trimExtend(entity, p, extend, cutters = []) {
+            // The command snapshots the selection as cutting edges, but the
+            // trimmed entity itself can never cut itself — and a selection
+            // containing only it must not hide every other cutter.
+            cutters = cutters.filter(id => id !== entity.id);
             const circleLineIntersections = (center, radius, a, b) => {
                 const d = V.sub(b, a), f = V.sub(a, center), aCoeff = V.dot(d, d);
                 if (aCoeff < 1e-12) return [];
@@ -10380,7 +10384,153 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
                 });
                 return;
             }
-            throw Error('This command edits LINE, POLYLINE, CIRCLE and ARC entities.');
+            if (entity.type === 'SPLINE') {
+                // Trim the spline by knot insertion: the clicked parameter span
+                // is removed and the remaining pieces stay real SPLINE entities
+                // (control points + knots), not dense polylines.
+                const cps = entity.controlPoints || entity.points || [];
+                if (cps.length < 2)
+                    return;
+                const degree = Math.min(entity.degree || 3, cps.length - 1);
+                const weights = entity.weights?.length === cps.length ? entity.weights : null;
+                // Work in homogeneous 4D (x*w, y*w, z*w, w) so rational
+                // splines stay correct; G.nurbs stores Euclidean points and
+                // multiplies by the weight itself.
+                const H0 = cps.map((c, i) => {
+                    const w = weights ? weights[i] : 1;
+                    return [c[0] * w, c[1] * w, (c[2] || 0) * w, w];
+                });
+                const K0 = entity.knots?.length === cps.length + degree + 1 ? entity.knots.slice() : G.uniformKnots(cps.length, degree);
+                const dense = G.path(entity, .5);
+                if (dense.length < 2)
+                    return;
+                const chain = dense.slice(0, -1).map((v, i) => [v, dense[i + 1]]);
+                const N = chain.length;
+                let bestK = 0, bestT = 0, bestD = Infinity;
+                for (let i = 0; i < N; i++) {
+                    const sd = segmentDistance(p, chain[i][0], chain[i][1]);
+                    if (sd.d < bestD) {
+                        bestD = sd.d;
+                        bestK = i;
+                        bestT = sd.t;
+                    }
+                }
+                const clickGlobal = bestK + bestT, cuts = [];
+                for (const e of this.doc.entities) {
+                    if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id))
+                        continue;
+                    for (const s of this.doc.geometry(e).segments) {
+                        for (let i = 0; i < N; i++) {
+                            const a = chain[i][0], b = chain[i][1];
+                            if (Math.abs(s[0][2] - a[2]) > 1e-5 || Math.abs(s[1][2] - b[2]) > 1e-5)
+                                continue;
+                            const hit = lineIntersection(a, b, ...s);
+                            if (hit && hit.t > -EPS && hit.t < 1 + EPS && hit.u >= -EPS && hit.u <= 1 + EPS)
+                                cuts.push(i + Math.max(0, Math.min(1, hit.t)));
+                        }
+                    }
+                }
+                const uniq = [];
+                for (const c of cuts.sort((a, b) => a - b))
+                    if (!uniq.length || c - uniq[uniq.length - 1] > 1e-6)
+                        uniq.push(c);
+                const inner = uniq.filter(t => t > EPS && t < N - EPS);
+                if (!inner.length)
+                    throw Error('No cutting intersections on this spline edge.');
+                const values = [0, ...inner, N];
+                let low = 0, high = N;
+                for (let i = 0; i < values.length - 1; i++)
+                    if (clickGlobal >= values[i] - EPS && clickGlobal <= values[i + 1] + EPS) {
+                        low = values[i];
+                        high = values[i + 1];
+                        break;
+                    }
+                // Dense samples sit at uniform parameter steps, so a global
+                // index maps to the curve parameter index / N.
+                const kept = [];
+                if (low > 1e-6)
+                    kept.push([0, low / N]);
+                if (high < N - 1e-6)
+                    kept.push([high / N, 1]);
+                // Boehm knot insertion until u has multiplicity `degree`, then
+                // the curve divides into left/right control polygons at u.
+                const insertTo = (H, K, u) => {
+                    let h = H, kts = K;
+                    for (let count = kts.reduce((s, k) => s + (Math.abs(k - u) < 1e-9 ? 1 : 0), 0); count < degree; count++) {
+                        let k = degree;
+                        while (k < h.length - 1 && kts[k + 1] <= u)
+                            k++;
+                        const q = [];
+                        for (let i = 0; i <= k - degree; i++)
+                            q.push(h[i]);
+                        for (let i = k - degree + 1; i <= k; i++) {
+                            const a = (u - kts[i]) / ((kts[i + degree] - kts[i]) || 1), A = h[i - 1], B = h[i];
+                            // Manual 4D blend: V.lerp is fixed to 3 components and
+                            // would drop the homogeneous weight.
+                            q.push([(1 - a) * A[0] + a * B[0], (1 - a) * A[1] + a * B[1], (1 - a) * A[2] + a * B[2], (1 - a) * A[3] + a * B[3]]);
+                        }
+                        for (let i = k; i < h.length; i++)
+                            q.push(h[i]);
+                        const at = kts.findIndex(kk => kk > u);
+                        kts = kts.slice();
+                        kts.splice(at < 0 ? kts.length : at, 0, u);
+                        h = q;
+                    }
+                    let k = -1;
+                    for (let i = 0; i < kts.length; i++)
+                        if (Math.abs(kts[i] - u) < 1e-9)
+                            k = i;
+                    const leftH = h.slice(0, k - degree + 1), rightH = h.slice(k - degree);
+                    return [
+                        leftH.length >= 2 ? { H: leftH, K: kts.slice(0, k - degree + 1).concat(Array(degree + 1).fill(u)) } : null,
+                        rightH.length >= 2 ? { H: rightH, K: Array(degree + 1).fill(u).concat(kts.slice(k + 1)) } : null,
+                    ];
+                };
+                const makePiece = (u0, u1) => {
+                    let cur = { H: H0, K: K0 };
+                    if (u0 > 1e-9) {
+                        const right = insertTo(cur.H, cur.K, u0)[1];
+                        if (!right)
+                            return null;
+                        cur = right;
+                    }
+                    if (u1 < 1 - 1e-9) {
+                        const left = insertTo(cur.H, cur.K, u1)[0];
+                        if (!left)
+                            return null;
+                        cur = left;
+                    }
+                    return cur;
+                };
+                const pieces = [];
+                for (const [u0, u1] of kept) {
+                    const got = makePiece(u0, u1);
+                    if (!got)
+                        continue;
+                    const pts = got.H.map(h => [h[0] / h[3], h[1] / h[3], h[2] / h[3]]);
+                    if (pts.length < 2)
+                        continue;
+                    const out = { type: 'SPLINE', controlPoints: pts.map(v => v.slice()), degree, knots: got.K, layer: entity.layer, color: entity.color };
+                    if (weights)
+                        out.weights = got.H.map(h => h[3]);
+                    if (entity.lineweight)
+                        out.lineweight = entity.lineweight;
+                    if (entity.linetype)
+                        out.linetype = entity.linetype;
+                    pieces.push(out);
+                }
+                if (!pieces.length) {
+                    this.doc.transaction('Trim spline', () => this.doc.remove([entity.id]));
+                    return;
+                }
+                this.doc.transaction('Trim spline', () => {
+                    this.doc.remove([entity.id]);
+                    for (const out of pieces)
+                        this.doc.add(out);
+                });
+                return;
+            }
+            throw Error('This command edits LINE, POLYLINE, SPLINE, CIRCLE and ARC entities.');
         }        entityGrips(e) {
             const result = [];
             if (e.points && ['LINE', 'POLYLINE', 'DIMENSION'].includes(e.type)) {
