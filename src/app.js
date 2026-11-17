@@ -2055,7 +2055,14 @@
                     return;
                 }
                 if (id === 'trim' || id === 'extend') {
-                    this.trimExtend(hit.e, p, id === 'extend', t.selectedIds);
+                    // Trim/extend interval selection must follow the actual cursor,
+                    // not the grid/osnap-snapped point: snapping can move the click
+                    // onto a neighbouring interval (or a knot) and make the edit
+                    // appear to do nothing or trim the wrong piece.
+                    const pick = screen
+                        ? (this.camera.unproject(screen[0], screen[1], (p[2] || 0)) || this.camera.pointOnView(screen[0], screen[1]) || p)
+                        : p;
+                    this.trimExtend(hit.e, pick, id === 'extend', t.selectedIds);
                     return;
                 }
             }
