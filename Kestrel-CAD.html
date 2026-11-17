@@ -10263,7 +10263,75 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
                     return;
                 }
             }
-            if (entity.type === 'POLYLINE') {
+            const isClosedCurve = (entity.type === 'POLYLINE' && !!entity.closed)
+                || (entity.type === 'SPLINE' && (entity.closed === true || ((entity.controlPoints || entity.points || []).length > 2 && V.same((entity.controlPoints || entity.points || [])[0], (entity.controlPoints || entity.points || []).at(-1)))));
+            if ((entity.type === 'POLYLINE' || entity.type === 'SPLINE') && isClosedCurve) {
+                // Closed curves are trimmed as a single complementary piece
+                // walking around the loop (AutoCAD-style), including cuts that
+                // land exactly on the seam/vertex, which the open-curve path
+                // would otherwise discard.
+                const cps = entity.type === 'SPLINE' ? (entity.controlPoints || entity.points || []) : [];
+                const bulged = entity.type === 'POLYLINE' && (entity.bulges || []).some(b => Math.abs(b) > EPS);
+                let dense;
+                if (entity.type === 'SPLINE') dense = G.path(entity, .5);
+                else dense = bulged ? G.path(entity, .5) : (entity.points || []);
+                if (dense.length > 1 && V.same(dense[0], dense[dense.length - 1])) dense = dense.slice(0, -1);
+                const chain = dense.map((v, i) => [v, dense[(i + 1) % dense.length]]);
+                const N = chain.length;
+                if (N < 1) return;
+                let bestK = 0, bestT = 0, bestD = Infinity;
+                for (let i = 0; i < N; i++) {
+                    const sd = segmentDistance(p, chain[i][0], chain[i][1]);
+                    if (sd.d < bestD) { bestD = sd.d; bestK = i; bestT = sd.t; }
+                }
+                const clickGlobal = bestK + bestT;
+                const cuts = [];
+                for (const e of this.doc.entities) {
+                    if (e.id === entity.id || !this.doc.visible(e) || cutters.length && !cutters.includes(e.id)) continue;
+                    for (const s of this.doc.geometry(e).segments) {
+                        for (let i = 0; i < N; i++) {
+                            const a = chain[i][0], b = chain[i][1];
+                            if (Math.abs(s[0][2] - a[2]) > 1e-5 || Math.abs(s[1][2] - b[2]) > 1e-5) continue;
+                            const hit = lineIntersection(a, b, ...s);
+                            if (hit && hit.t > -EPS && hit.t < 1 + EPS && hit.u >= -EPS && hit.u <= 1 + EPS)
+                                cuts.push(i + Math.max(0, Math.min(1, hit.t)));
+                        }
+                    }
+                }
+                const uniq = [];
+                for (const c of cuts.sort((a, b) => a - b)) if (!uniq.length || c - uniq[uniq.length - 1] > 1e-6) uniq.push(c);
+                if (uniq.length < 2) throw Error('No cutting intersections on this curve.');
+                const extChain = chain.concat(chain);
+                const cutsExt = uniq.concat(uniq.map(c => c + N));
+                const uniqExt = [];
+                for (const c of cutsExt.sort((a, b) => a - b)) if (!uniqExt.length || c - uniqExt[uniqExt.length - 1] > 1e-6) uniqExt.push(c);
+                const innerExt = uniqExt.filter(t => t > EPS && t < 2 * N - EPS);
+                const valuesExt = [...new Set([0, ...innerExt, 2 * N].map(x => Number(x.toFixed(10))))].sort((a, b) => a - b);
+                let lowExt = 0, highExt = 2 * N;
+                for (let i = 0; i < valuesExt.length - 1; i++) if (clickGlobal >= valuesExt[i] - EPS && clickGlobal <= valuesExt[i + 1] + EPS) { lowExt = valuesExt[i]; highExt = valuesExt[i + 1]; break; }
+                const startExt = highExt, endExt = lowExt + N;
+                const pointAtExt = x => {
+                    const i = Math.min(2 * N - 1, Math.floor(x));
+                    const seg = extChain[i % N];
+                    return V.lerp(seg[0], seg[1], Math.max(0, Math.min(1, x - i)));
+                };
+                const dedupe = list => {
+                    const out = [];
+                    for (const v of list) if (!out.length || V.dist(out[out.length - 1], v) > 1e-9) out.push(v);
+                    return out;
+                };
+                const piece = [pointAtExt(startExt)];
+                for (let i = Math.floor(startExt); i < Math.floor(endExt); i++) piece.push(extChain[i % N][1]);
+                if (endExt - Math.floor(endExt) > EPS) piece.push(pointAtExt(endExt));
+                const pts = dedupe(piece);
+                if (pts.length < 2) { this.doc.transaction('Trim curve', () => this.doc.remove([entity.id])); return; }
+                const out = { type: 'POLYLINE', points: pts.map(v => v.slice()), closed: false, layer: entity.layer, color: entity.color };
+                if (entity.lineweight) out.lineweight = entity.lineweight;
+                if (entity.linetype) out.linetype = entity.linetype;
+                this.doc.transaction('Trim curve', () => { this.doc.remove([entity.id]); this.doc.add(out); });
+                return;
+            }
+            if (entity.type === 'POLYLINE' && !isClosedCurve) {
                 // Trim the clicked polyline edge at its intersections, splitting
                 // the polyline into the remaining pieces (AutoCAD-style).
                 const closed = !!entity.closed, pts = entity.points, count = pts.length;
@@ -10391,7 +10459,7 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
                 });
                 return;
             }
-            if (entity.type === 'SPLINE') {
+            if (entity.type === 'SPLINE' && !isClosedCurve) {
                 // Trim the spline by knot insertion: the clicked parameter span
                 // is removed and the remaining pieces stay real SPLINE entities
                 // (control points + knots), not dense polylines.
