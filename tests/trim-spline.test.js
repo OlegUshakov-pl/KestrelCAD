@@ -192,4 +192,65 @@ test('rational spline with non-unit knot domain keeps weights consistent', () =>
     assert.ok(V.dist(evalAt(app.added[1], 0), evalAt(s, t1)) < 0.5, 'right piece starts at the cut');
 });
 
+// A curve crossing itself is its own cutting edge: the target entity must
+// not be skipped as a cutter just because it is the entity being trimmed.
+const plainSplineChecks = (p, label) => {
+    assert.equal(p.type, 'SPLINE', label + ': type kept');
+    assert.ok(p.controlPoints.length >= 2, label + ': at least 2 control points');
+    assert.equal(p.knots.length, p.controlPoints.length + p.degree + 1, label + ': knots length');
+    assert.ok(p.knots.every((k, i) => i === 0 || k >= p.knots[i - 1] - 1e-12), label + ': knots monotone');
+};
+
+test('self-intersecting spline trims against its own crossing', () => {
+    const bow = spline([[0, 0, 0], [100, 100, 0], [100, 0, 0], [0, 100, 0]], 1);
+    const app = mock([bow]);
+    app.trimExtend(bow, [100, 50, 0], false, []);
+    assert.equal(app.added.length, 2, 'two pieces expected, got ' + app.added.length);
+    const ends = [];
+    for (const p of app.added) {
+        plainSplineChecks(p, 'self-crossed piece');
+        ends.push(evalAt(p, 0), evalAt(p, 1));
+    }
+    assert.ok(ends.some(q => V.dist(q, [0, 0, 0]) < 1e-6), 'curve start kept');
+    assert.ok(ends.some(q => V.dist(q, [0, 100, 0]) < 1e-6), 'curve end kept');
+    assert.ok(ends.some(q => V.dist(q, [50, 50, 0]) < 1),
+        'a cut lands on the self-crossing (50,50), ends=' + JSON.stringify(ends));
+});
+
+test('cubic spline loop trims at its own crossing', () => {
+    const s = spline([[0, 0, 0], [120, 60, 0], [60, 120, 0], [0, 60, 0], [60, 0, 0]]);
+    const dense = G.path(s, .5);
+    let crossing = null;
+    for (let i = 0; i < dense.length - 1 && !crossing; i++)
+        for (let j = i + 2; j < dense.length - 1; j++) {
+            const h = lineIntersection(dense[i], dense[i + 1], dense[j], dense[j + 1]);
+            if (h && h.t > 1e-6 && h.t < 1 - 1e-6 && h.u > 1e-6 && h.u < 1 - 1e-6) {
+                crossing = V.lerp(dense[i], dense[i + 1], h.t);
+                break;
+            }
+        }
+    assert.ok(crossing, 'the fixture spline must actually cross itself');
+    const app = mock([s]);
+    app.trimExtend(s, dense[0], false, []);
+    assert.equal(app.added.length, 1, 'one piece expected, got ' + app.added.length);
+    const p = app.added[0];
+    plainSplineChecks(p, 'loop piece');
+    assert.ok(V.dist(evalAt(p, 0), crossing) < 1,
+        'piece starts at the crossing: ' + evalAt(p, 0) + ' vs ' + crossing);
+    assert.ok(V.dist(evalAt(p, 1), evalAt(s, 1)) < 1e-6, 'piece keeps the curve end');
+});
+
+test('explicit foreign cutter ignores the spline self-crossing', () => {
+    const bow = spline([[0, 0, 0], [100, 100, 0], [100, 0, 0], [0, 100, 0]], 1);
+    const line = verticalLine(30);
+    const app = mock([bow, line]);
+    app.trimExtend(bow, [40, 40, 0], false, ['CUT']);
+    // Cuts come from the line only: (30,30) and (30,70), never (50,50).
+    assert.equal(app.added.length, 2, 'two pieces expected, got ' + app.added.length);
+    const ends = app.added.flatMap(p => [evalAt(p, 0), evalAt(p, 1)]);
+    assert.ok(ends.some(q => V.dist(q, [30, 30, 0]) < 1e-6), 'cut on the line at (30,30)');
+    assert.ok(ends.some(q => V.dist(q, [30, 70, 0]) < 1e-6), 'cut on the line at (30,70)');
+    assert.ok(ends.every(q => V.dist(q, [50, 50, 0]) > 1), 'no cut on the ignored self-crossing');
+});
+
 console.log('\ntrim spline: ' + pass + ' passed');

@@ -104,4 +104,47 @@ test('bulged polyline trim does not crash and produces pieces', () => {
     assert.ok(app.added.length >= 1, 'pieces expected');
 });
 
+// A curve that crosses itself is its own cutting edge (AutoCAD behaviour);
+// the entity must not be skipped as a cutter just because it is the target.
+const bowTie = { type: 'POLYLINE', id: 'P1', closed: false, points: [[0, 0, 0], [100, 100, 0], [100, 0, 0], [0, 100, 0]] };
+
+test('self-intersecting polyline trims against its own crossing', () => {
+    const app = mock([bowTie]);
+    app.trimExtend(bowTie, [100, 50, 0], false, []);
+    assert.equal(app.added.length, 2, 'two pieces expected, got ' + app.added.length);
+    const [a, b] = app.added.map(e => e.points);
+    near(a[0], [0, 0]); near(a[1], [50, 50]);
+    near(b[0], [50, 50]); near(b[1], [0, 100]);
+    assert.ok(app.ops.includes('Trim polyline'));
+});
+
+test('self-intersecting polyline selected as its own cutting edge trims', () => {
+    const app = mock([bowTie]);
+    app.trimExtend(bowTie, [100, 50, 0], false, ['P1']);
+    assert.equal(app.added.length, 2, 'two pieces expected, got ' + app.added.length);
+});
+
+test('closed self-intersecting ring keeps the span around the crossing', () => {
+    const pl = { ...bowTie, closed: true };
+    const app = mock([pl]);
+    app.trimExtend(pl, [100, 50, 0], false, []);
+    assert.equal(app.added.length, 1, 'one piece expected, got ' + app.added.length);
+    const pts = app.added[0].points;
+    near(pts[0], [50, 50]);
+    near(pts[pts.length - 1], [50, 50]);
+    assert.ok(pts.some(q => Math.abs(q[0]) < 1e-6 && Math.abs(q[1]) < 1e-6), 'corner (0,0) kept');
+});
+
+test('explicit foreign cutter still wins when the target crosses itself', () => {
+    // Only the vertical line was chosen as a cutting edge, so the bow-tie's
+    // own crossing must not add a cut of its own: both pieces end on the
+    // line (30,30)/(30,70), never on the self-crossing (50,50).
+    const app = mock([bowTie, verticalLine(30)]);
+    app.trimExtend(bowTie, [40, 40, 0], false, ['CUT']);
+    assert.equal(app.added.length, 2, 'two pieces expected, got ' + app.added.length);
+    const [a, b] = app.added.map(e => e.points);
+    near(a[0], [0, 0]); near(a[1], [30, 30]);
+    near(b[0], [30, 70]); near(b[1], [0, 100]);
+});
+
 console.log('\ntrim polyline: ' + pass + ' passed');

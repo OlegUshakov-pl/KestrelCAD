@@ -10088,7 +10088,33 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
             // The command snapshots the selection as cutting edges, but the
             // trimmed entity itself can never cut itself — and a selection
             // containing only it must not hide every other cutter.
+            // The exception is a curve crossing *itself*: AutoCAD trims a
+            // self-intersecting polyline/spline against its own crossing
+            // points, so an empty selection ("all objects") or a selection
+            // that names this very curve must allow self-intersections.
+            const selfCut = !cutters.length || cutters.includes(entity.id);
             cutters = cutters.filter(id => id !== entity.id);
+            // Crossing points of the curve with its own path. Neighbouring
+            // segments always meet at their shared vertex, so only pairs
+            // that are far apart in the chain can really cross; the seam
+            // pair of a closed ring is skipped for the same reason.
+            const selfCuts = (chain, closed) => {
+                const out = [], n = chain.length, boxes = chain.map(s => [
+                    Math.min(s[0][0], s[1][0]), Math.min(s[0][1], s[1][1]),
+                    Math.max(s[0][0], s[1][0]), Math.max(s[0][1], s[1][1]),
+                ]);
+                for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
+                    if (closed && i === 0 && j === n - 1) continue;
+                    const A = boxes[i], B = boxes[j];
+                    if (A[2] < B[0] - EPS || B[2] < A[0] - EPS || A[3] < B[1] - EPS || B[3] < A[1] - EPS) continue;
+                    const hit = lineIntersection(chain[i][0], chain[i][1], chain[j][0], chain[j][1]);
+                    if (hit && hit.t > -EPS && hit.t < 1 + EPS && hit.u > -EPS && hit.u < 1 + EPS) {
+                        out.push(i + Math.max(0, Math.min(1, hit.t)));
+                        out.push(j + Math.max(0, Math.min(1, hit.u)));
+                    }
+                }
+                return out;
+            };
             const circleLineIntersections = (center, radius, a, b) => {
                 const d = V.sub(b, a), f = V.sub(a, center), aCoeff = V.dot(d, d);
                 if (aCoeff < 1e-12) return [];
@@ -10298,6 +10324,7 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
                         }
                     }
                 }
+                if (selfCut) cuts.push(...selfCuts(chain, true));
                 const uniq = [];
                 for (const c of cuts.sort((a, b) => a - b)) if (!uniq.length || c - uniq[uniq.length - 1] > 1e-6) uniq.push(c);
                 if (uniq.length < 2) throw Error('No cutting intersections on this curve.');
@@ -10379,6 +10406,7 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
                         }
                     }
                 }
+                if (selfCut) cuts.push(...selfCuts(chain, closed));
                 const uniq = [];
                 for (const c of cuts.sort((a, b) => a - b))
                     if (!uniq.length || c - uniq[uniq.length - 1] > 1e-6)
@@ -10516,6 +10544,7 @@ K.installTextSearchUI=function(App){const run=App.prototype.run,dialog=App.proto
                         }
                     }
                 }
+                if (selfCut) cuts.push(...selfCuts(chain, false));
                 const uniq = [];
                 for (const c of cuts.sort((a, b) => a - b))
                     if (!uniq.length || c - uniq[uniq.length - 1] > 1e-6)
