@@ -53,7 +53,9 @@
     } }
     function closed(e) { return e.type === 'CIRCLE' || e.type === 'HATCH' || (e.type === 'POLYLINE' && e.closed) || (e.type === 'ELLIPSE' && (e.endAngle == null || sweep(e.startAngle || 0, e.endAngle) > TAU - EPS)); }
     function hatchSegments(e) { const p = e.points || []; if (p.length < 3)
-        return []; const n = e.normal || faceNormal(p), b = basis(n), origin = p[0], flat = p.map(v => { const d = V.sub(v, origin); return [V.dot(d, b.x), V.dot(d, b.y)]; }); const result = [], spacing = Math.max(e.spacing || 10, .001), angles = e.pattern === 'cross' ? [e.angle ?? Math.PI / 4, (e.angle ?? Math.PI / 4) + Math.PI / 2] : [e.angle ?? Math.PI / 4]; for (const a of angles) {
+        return []; const n = e.normal || faceNormal(p), b = basis(n), origin = p[0], flat = p.map(v => { const d = V.sub(v, origin); return [V.dot(d, b.x), V.dot(d, b.y)]; });
+        /* A negative spacing used to become .001 and generate thousands of lines. */
+        const result = [], spacing = Number.isFinite(e.spacing) && e.spacing > 0 ? Math.max(e.spacing, .001) : 10, angles = e.pattern === 'cross' ? [e.angle ?? Math.PI / 4, (e.angle ?? Math.PI / 4) + Math.PI / 2] : [e.angle ?? Math.PI / 4]; for (const a of angles) {
         const c = Math.cos(a), s = Math.sin(a), q = flat.map(v => [v[0] * c + v[1] * s, -v[0] * s + v[1] * c]);
         const min = Math.min(...q.map(v => v[1])), max = Math.max(...q.map(v => v[1]));
         let step = spacing;

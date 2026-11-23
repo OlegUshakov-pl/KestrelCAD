@@ -91,7 +91,10 @@
                     throw Error('Too few spline control points.');
                 if (e.degree != null && (!Number.isInteger(e.degree) || e.degree < 1 || e.degree > Math.min(10, count - 1)))
                     throw Error('Invalid spline degree.');
-                if (e.knots && (!Array.isArray(e.knots) || !e.knots.every((v, i) => Number.isFinite(v) && (!i || v >= e.knots[i - 1]))))
+                /* Geo.nurbs() ignores a knot vector of the wrong length, so a
+                   malformed project would silently render as uniform knots. */
+                const degree = e.degree ?? Math.min(3, count - 1);
+                if (e.knots && (!Array.isArray(e.knots) || e.knots.length !== count + degree + 1 || !e.knots.every((v, i) => Number.isFinite(v) && (!i || v >= e.knots[i - 1]))))
                     throw Error('Invalid spline knot sequence.');
                 if (e.weights && (!Array.isArray(e.weights) || e.weights.length !== count || !e.weights.every(v => Number.isFinite(v) && v > 0)))
                     throw Error('Invalid spline weights.');
@@ -126,7 +129,14 @@
         editable(e) { return this.visible(e) && !this.layer(e).locked; }
         selected(editable = false) { return [...this.selection].map(id => this.byId.get(id)).filter(e => e && (!editable || this.editable(e))); }
         entity(type, props = {}) { return { id: uid(), type, layer: this.currentLayer, color: 'bylayer', linetype: 'ByLayer', ...props }; }
-        add(type, props = {}) { const e = typeof type === 'object' ? { id: uid(), layer: this.currentLayer, color: 'bylayer', linetype: 'ByLayer', ...type } : this.entity(type, props); this.entities.push(e); this.byId.set(e.id, e); return e; }
+        add(type, props = {}) { const e = typeof type === 'object' ? { id: uid(), layer: this.currentLayer, color: 'bylayer', linetype: 'ByLayer', ...type } : this.entity(type, props);
+            /* A spread can overwrite the generated id with undefined, and callers
+               may pass an explicit id. Keep entities and byId in one-to-one sync. */
+            if (typeof e.id !== 'string' || !e.id)
+                e.id = uid();
+            if (this.byId.has(e.id))
+                throw Error('Duplicate entity identifier: ' + e.id);
+            this.entities.push(e); this.byId.set(e.id, e); return e; }
         remove(ids) { const s = new Set(ids); K.Constraints?.removeReferences(this, [...s]); K.SpatialConstraints?.removeReferences(this,[...s]); this.entities = this.entities.filter(e => !s.has(e.id)); for (const id of s)
             this.selection.delete(id); this.reindex(); }
         replace(id, e) { const i = this.entities.findIndex(x => x.id === id); if (i >= 0) {
