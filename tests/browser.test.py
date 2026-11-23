@@ -149,6 +149,17 @@ with sync_playwright() as p:
         after=state('kestrel.doc.geometry(kestrel.doc.entities[0]).texts[0].position')
         near(after[0],before[0]+20,1);near(after[1],before[1]+30,1)
     test('dragging a linear dimension text moves only its label',dimension_text_grip)
+    def dimension_arrow_flip():
+        fresh();command('DIM 0,0 100,0 15');fit();select([0])
+        tris='kestrel.doc.geometry(kestrel.doc.entities[0]).triangles'
+        apex=state(tris+'[0].points[0]');inside=state(tris+'[0].points[1][0]')
+        eq(page.evaluate('(p)=>kestrel.gripAt(kestrel.camera.project(p))?.kind',apex),'dim-arrow')
+        click_world(apex);eq(state('kestrel.doc.entities[0].arrowOutside'),True)
+        outside=state(tris+'[0].points[1][0]');assert outside<apex[0]<inside
+        second=state(tris+'[1].points[1][0]');assert second>100
+        click_world(apex);eq(state('kestrel.doc.entities[0].arrowOutside'),False)
+        eq(state(tris+'[0].points[1][0]'),inside)
+    test('clicking a dimension arrow grip flips both arrowheads',dimension_arrow_flip)
     def arrays():
         fresh();command('C 0,0 10');select([0]);action('array');submit({'columns':3,'rows':2,'dx':30,'dy':40});eq(count(),6);eq(len(set(state('kestrel.doc.entities.map(e=>e.id)'))),6);action('undo');eq(count(),1)
     test('rectangular array uses unique editable objects and one undo',arrays)

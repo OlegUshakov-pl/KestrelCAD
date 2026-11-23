@@ -616,6 +616,7 @@
                     html += input('Text after', 'suffix', one.suffix || '', 'text');
                     html += input('Precision', 'precision', one.precision ?? this.defaults.precision, 'number', 'min="0" max="6" step="1"');
                     html += row('Text rotate', `<select data-prop="textRotate" aria-label="Text rotation">${['standard', 'horizontal'].map(v => `<option ${(one.textRotate || 'standard') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`);
+                    html += row('Arrows outside', `<input data-prop="arrowOutside" aria-label="Arrows outside" type="checkbox" ${one.arrowOutside ? 'checked' : ''}>`);
                 }
                 else if (one.type === 'MESH') {
                     const b = centerOf([one]);
@@ -703,8 +704,8 @@
                 if (value === 'horizontal') e.textRotate = 'horizontal';
                 else delete e.textRotate;
             }
-            else if (key === 'closed')
-                e.closed = !!value;
+            else if (key === 'closed' || key === 'arrowOutside')
+                e[key] = !!value;
             else {
                 const n = finite(value);
                 if (['height', 'textHeight', 'spacing'].includes(key) && n <= 0)
@@ -1873,7 +1874,7 @@
                 return;
             const p = this.eventPoint(e), d = this.drag;
             try {
-                if (d.mode === 'grip' && d.moved && d.preview) {
+                if (d.mode === 'grip' && d.moved && d.preview && d.grip.kind !== 'dim-arrow') {
                     this.doc.transaction('Edit grip', () => this.doc.replace(d.original.id, d.preview));
                 }
                 else if (d.mode === 'right-pending' && !d.moved) {
@@ -1891,7 +1892,12 @@
                             this.selectAt(p, d.shift || d.ctrl);
                     }
                 }
-                else if (d.mode === 'grip' && !d.moved) { /* Grips are edited by dragging, not a click-only state. */ }
+                else if (d.mode === 'grip' && !d.moved && d.grip.kind === 'dim-arrow') {
+                    const e = K.clone(d.original);
+                    e.arrowOutside = !e.arrowOutside;
+                    this.doc.transaction('Flip dimension arrows', () => this.doc.replace(e.id, e));
+                }
+                else if (d.mode === 'grip' && !d.moved) { /* Other grips are edited by dragging, not by clicking. */ }
             }
             catch (error) {
                 this.fail(error);
@@ -2917,7 +2923,11 @@
                     const n = V.norm(V.cross([0, 0, 1], V.sub(e.points[1], e.points[0])));
                     result.push({ kind: 'dim-offset', point: V.add(V.lerp(...e.points, .5), V.mul(n, e.offset || 0)) });
                     try {
-                        result.push({ kind: 'dim-text', point: G.dimension(e).text.position.slice() });
+                        const d = G.dimension(e);
+                        result.push({ kind: 'dim-text', point: d.text.position.slice() });
+                        if (!e.kind || ['aligned', 'linear', 'angular'].includes(e.kind))
+                            for (const t of d.triangles || [])
+                                result.push({ kind: 'dim-arrow', point: t.points[0].slice() });
                     }
                     catch { /* Rendered text position is unavailable for invalid dimensions. */ }
                 }

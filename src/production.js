@@ -102,6 +102,7 @@
         if (e.kind && e.type === 'DIMENSION' && !['aligned', 'linear', 'radius', 'diameter', 'angular', 'ordinate-x', 'ordinate-y'].includes(e.kind)) throw Error('Unknown dimension mode.');
         if (e.type === 'DIMENSION') for (const k of ['prefix', 'suffix']) if (e[k] !== undefined && (typeof e[k] !== 'string' || e[k].length > 255)) throw Error('Invalid dimension affix.');
         if (e.type === 'DIMENSION' && e.textRotate !== undefined && e.textRotate !== 'standard' && e.textRotate !== 'horizontal') throw Error('Invalid dimension text rotation.');
+        if (e.type === 'DIMENSION' && e.arrowOutside !== undefined && typeof e.arrowOutside !== 'boolean') throw Error('Invalid dimension arrow placement.');
         if (e.measureAxis) point(e.measureAxis);
     }
     function bind(doc) {
@@ -215,20 +216,20 @@
     function dimension(e) {
         const doc = owners.get(e), style = doc?.production?.dimstyles.find(s => s.name === e.dimstyle), v = { ...style, ...e };
         if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); return result; }
-        const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [];
+        const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [], outside = e.arrowOutside === true;
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
-        const arrow = (a, toward) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u), w1 = V.add(a, V.add(V.mul(u, h), V.mul(side, h * .25))), w2 = V.add(a, V.add(V.mul(u, h), V.mul(side, -h * .25))); segments.push([a, w1], [a, w2]); triangles.push({ points: [a, w1, w2], normal: e.normal || [0, 0, 1] }); };
+        const arrow = (a, toward, flip = 1) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u), len = flip * h, w1 = V.add(a, V.add(V.mul(u, len), V.mul(side, h * .25))), w2 = V.add(a, V.add(V.mul(u, len), V.mul(side, -h * .25))); segments.push([a, w1], [a, w2]); triangles.push({ points: [a, w1, w2], normal: e.normal || [0, 0, 1] }); };
         if (e.kind === 'linear') {
             const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < .3, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
-            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b); arrow(b, a); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
+            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b, outside ? -1 : 1); arrow(b, a, outside ? -1 : 1); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
             const rd = isVert ? [0, 1, 0] : (u[0] < 0 ? V.mul(u, -1) : u);
             direction = rd;
             const rside = isVert ? [-1, 0, 0] : V.norm(V.cross(n, rd));
             const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(rside, isVert ? h * (.24 + .12 * label.length) : h * .24));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
-            segments.push([other, q]); arrow(q, other); if (e.kind === 'diameter') arrow(other, q);
+            segments.push([other, q]); arrow(q, other, outside ? -1 : 1); if (e.kind === 'diameter') arrow(other, q, outside ? -1 : 1);
             direction = V.norm(V.sub(q, c));
             if (Math.abs(direction[0]) >= .3 && direction[0] < 0) direction = V.mul(direction, -1);
             if (Math.abs(direction[0]) < .3) direction = [0, 1, 0];
@@ -237,8 +238,11 @@
             if (p.length !== 3) throw Error('Angular dimensions require a vertex and two ray points.');
             const u = V.norm(V.sub(p[1], p[0])), w = V.norm(V.sub(p[2], p[0])), side = V.cross(n, u), a = angle(Math.atan2(V.dot(w, side), V.dot(w, u))), radius = Math.abs(e.offset || Math.min(V.dist(p[0], p[1]), V.dist(p[0], p[2])) * .6);
             const curve = t => V.add(p[0], V.add(V.mul(u, radius * Math.cos(t)), V.mul(side, radius * Math.sin(t))));
-            const count = Math.max(8, Math.ceil(a * 20)); for (let i = 0; i < count; i++) segments.push([curve(a * i / count), curve(a * (i + 1) / count)]);
-            segments.push([p[0], curve(0)], [p[0], curve(a)]); arrow(curve(0), curve(.1)); arrow(curve(a), curve(a - .1));
+            const ext = outside ? h / radius : 0, start = -ext, end = a + ext, count = Math.max(8, Math.ceil((end - start) * 20));
+            for (let i = 0; i < count; i++) segments.push([curve(start + (end - start) * i / count), curve(start + (end - start) * (i + 1) / count)]);
+            segments.push([p[0], curve(0)], [p[0], curve(a)]);
+            if (outside) { arrow(curve(0), curve(start)); arrow(curve(a), curve(end)); }
+            else { arrow(curve(0), curve(.1)); arrow(curve(a), curve(a - .1)); }
             position = V.add(curve(a / 2), V.mul(V.norm(V.sub(curve(a / 2), p[0])), h)); text = (a * 180 / Math.PI).toFixed(v.precision ?? 2) + '°';
         } else {
             const a = p[0], b = p[1], axis = e.kind === 'ordinate-y' ? 1 : 0, end = V.add(b, e.kind === 'ordinate-y' ? [e.offset || h * 5, 0, 0] : [0, e.offset || h * 5, 0]);
