@@ -156,6 +156,8 @@ with sync_playwright() as p:
         eq(page.evaluate('(p)=>kestrel.gripAt(kestrel.camera.project(p))?.kind',apex),'dim-arrow')
         click_world(apex);eq(state('kestrel.doc.entities[0].arrowOutside'),True)
         outside=state(tris+'[0].points[1][0]');assert outside<apex[0]<inside
+        extent=state('Math.min(...kestrel.doc.geometry(kestrel.doc.entities[0]).segments.flat().map(p=>p[0]))')
+        assert extent<outside-1
         second=state(tris+'[1].points[1][0]');assert second>100
         click_world(apex);eq(state('kestrel.doc.entities[0].arrowOutside'),False)
         eq(state(tris+'[0].points[1][0]'),inside)
