@@ -326,13 +326,20 @@
         } for (let i = 0; i < n; i++)
         for (let j = 0; j < m; j++)
             faces.push([i * m + j, ((i + 1) % n) * m + j, ((i + 1) % n) * m + (j + 1) % m, i * m + (j + 1) % m]); return { type: 'MESH', primitive: 'Torus', vertices, faces, smooth: true }; }
-    function extrude(points, height, normal = null) { if (!Number.isFinite(height) || Math.abs(height) < EPS)
-        throw Error('Extrusion height cannot be zero.'); let p = points.map(v => v.slice()); if (p.length > 2 && V.same(p[0], p[p.length - 1]))
-        p.pop(); p = p.filter((v, i) => !i || !V.same(v, p[i - 1])); let changed = true; while (changed && p.length > 3) {
+    function extrude(points, height, normal = null) {
+        let p = points.map(v => v.slice());
+        const span = Math.max(0, ...p.map(q => V.dist(q, p[0])));
+        /* Zero tests and deduplication must follow the profile scale, otherwise
+           every sub-micron profile is treated as collapsed. */
+        if (!Number.isFinite(height) || Math.abs(height) <= EPS * span)
+            throw Error('Extrusion height cannot be zero.');
+        const dedupeEps = span * 1e-12;
+        if (p.length > 2 && V.same(p[0], p[p.length - 1], dedupeEps))
+        p.pop(); p = p.filter((v, i) => !i || !V.same(v, p[i - 1], dedupeEps)); let changed = true; while (changed && p.length > 3) {
         changed = false;
         for (let i = 0; i < p.length; i++) {
             const a = V.sub(p[i], p[(i + p.length - 1) % p.length]), b = V.sub(p[(i + 1) % p.length], p[i]);
-            if (V.len(V.cross(a, b)) < EPS * Math.max(1, V.len(a) * V.len(b)) && V.dot(a, b) >= 0) {
+            if (V.len(V.cross(a, b)) <= EPS * V.len(a) * V.len(b) && V.dot(a, b) >= 0) {
                 p.splice(i, 1);
                 changed = true;
                 break;
@@ -375,8 +382,9 @@
             v += V.dot(p[t[0]], V.cross(p[t[1]], p[t[2]])) / 6;
     } return v; }
     function offset(e, d) { if (['CIRCLE', 'ARC'].includes(e.type)) {
-        const r = (e.radius || V.len(conicAxes(e).x)) + d;
-        if (r <= EPS)
+        const base = e.radius || V.len(conicAxes(e).x), r = base + d;
+        /* Compare against a share of the source radius, not a fixed epsilon. */
+        if (r <= EPS * base)
             throw Error('Offset would create a non-positive radius.');
         const out = JSON.parse(JSON.stringify(e)), f = r / (e.radius || V.len(conicAxes(e).x));
         out.radius = r;

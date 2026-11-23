@@ -11,7 +11,9 @@
         cross: (a, b) => [a[1] * (b[2] || 0) - (a[2] || 0) * b[1], (a[2] || 0) * b[0] - a[0] * (b[2] || 0), a[0] * b[1] - a[1] * b[0]],
         len: a => Math.hypot(...a),
         dist: (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], (a[2] || 0) - (b[2] || 0)),
-        norm(a) { const l = V.len(a); return l > EPS ? V.mul(a, 1 / l) : [0, 0, 0]; },
+        /* A nonzero vector must keep its direction at any scale: using a fixed
+           absolute epsilon here silently zeroed out small-but-valid geometry. */
+        norm(a) { const l = V.len(a), s = l > 0 ? 1 / l : 0; return Number.isFinite(s) ? V.mul(a, s) : [0, 0, 0]; },
         lerp: (a, b, t) => V.add(a, V.mul(V.sub(b, a), t)),
         same: (a, b, eps = EPS) => V.dist(a, b) < eps
     };
@@ -27,12 +29,17 @@
         scale(sx, sy = sx, sz = sx) { const m = M.identity(); m[0] = sx; m[5] = sy; m[10] = sz; return m; },
         rotation(angle, axis = [0, 0, 1]) { const [x, y, z] = V.norm(axis), c = Math.cos(angle), s = Math.sin(angle), t = 1 - c; return new Float64Array([t * x * x + c, t * x * y + s * z, t * x * z - s * y, 0, t * x * y - s * z, t * y * y + c, t * y * z + s * x, 0, t * x * z + s * y, t * y * z - s * x, t * z * z + c, 0, 0, 0, 0, 1]); },
         around(p, m) { return M.multiply(M.translation(...p), M.multiply(m, M.translation(...V.mul(p, -1)))); },
-        inverse(a) { const aug = Array.from({ length: 4 }, (_, r) => [...Array.from({ length: 4 }, (_, c) => a[c * 4 + r]), ...Array.from({ length: 4 }, (_, c) => r === c ? 1 : 0)]); for (let i = 0; i < 4; i++) {
+        inverse(a) { const aug = Array.from({ length: 4 }, (_, r) => [...Array.from({ length: 4 }, (_, c) => a[c * 4 + r]), ...Array.from({ length: 4 }, (_, c) => r === c ? 1 : 0)]);
+            /* Follow the matrix scale so uniformly scaled matrices stay invertible
+               at sub-micron magnitudes; the homogeneous column is always 1, so it
+               is excluded from the scale estimate. */
+            const pivotEps = (Math.max(...Array.from({ length: 12 }, (_, i) => Math.abs(a[i]))) || 1) * 1e-16;
+            for (let i = 0; i < 4; i++) {
             let k = i;
             for (let r = i + 1; r < 4; r++)
                 if (Math.abs(aug[r][i]) > Math.abs(aug[k][i]))
                     k = r;
-            if (Math.abs(aug[k][i]) < 1e-16)
+            if (Math.abs(aug[k][i]) < pivotEps)
                 return null;
             [aug[i], aug[k]] = [aug[k], aug[i]];
             const s = aug[i][i];
@@ -52,7 +59,10 @@
     function basis(normal = [0, 0, 1]) { const n = V.norm(normal); const x = V.norm(V.cross(Math.abs(n[0]) < 1 / 64 && Math.abs(n[1]) < 1 / 64 ? [0, 1, 0] : [0, 0, 1], n)); return { x, y: V.cross(n, x), n }; }
     function angle(a) { return ((a % TAU) + TAU) % TAU; }
     function sweep(a, b) { let s = angle(b - a); return s < EPS ? TAU : s; }
-    function lineIntersection(a, b, c, d) { const r = V.sub(b, a), s = V.sub(d, c), den = r[0] * s[1] - r[1] * s[0]; if (Math.abs(den) < EPS)
+    function lineIntersection(a, b, c, d) { const r = V.sub(b, a), s = V.sub(d, c), den = r[0] * s[1] - r[1] * s[0];
+        /* den is |r||s|sin(theta), so the parallel test has to be relative to
+           the segment lengths; a fixed 1e-8 rejected all short segments. */
+        if (Math.abs(den) <= EPS * V.len(r) * V.len(s))
         return null; const u = V.sub(c, a), t = (u[0] * s[1] - u[1] * s[0]) / den, v = (u[0] * r[1] - u[1] * r[0]) / den; return { point: V.lerp(a, b, t), t, u: v }; }
     function segmentDistance(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy; const t = l ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l)) : 0; return { d: Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy), t, point: [a[0] + t * dx, a[1] + t * dy] }; }
     function polygonArea(p) { let a = 0; for (let i = 0, j = p.length - 1; i < p.length; j = i++)
@@ -76,19 +86,26 @@
         const n = faceNormal(points), drop = Math.abs(n[0]) > Math.abs(n[1]) ? (Math.abs(n[0]) > Math.abs(n[2]) ? 0 : 2) : (Math.abs(n[1]) > Math.abs(n[2]) ? 1 : 2);
         const p = points.map(v => v.filter((_, i) => i !== drop)), sign = polygonArea(p) >= 0 ? 1 : -1, idx = p.map((_, i) => i), out = [];
         const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        /* Cross products have area units: scale the ear-clipping tolerance to
+           the polygon extent. A fixed 1e-8 dropped every sub-0.1mm polygon. */
+        let extent = 0;
+        for (let i = 0; i < p.length; i++)
+            for (let j = 0; j < i; j++)
+                extent = Math.max(extent, Math.hypot(p[i][0] - p[j][0], p[i][1] - p[j][1]));
+        const areaEps = EPS * extent * extent;
         let guard = points.length * points.length;
         while (idx.length > 3 && guard-- > 0) {
             let found = false;
             for (let k = 0; k < idx.length; k++) {
                 const a = idx[(k + idx.length - 1) % idx.length], b = idx[k], c = idx[(k + 1) % idx.length];
-                if (cross(p[a], p[b], p[c]) * sign <= EPS)
+                if (cross(p[a], p[b], p[c]) * sign <= areaEps)
                     continue;
                 let blocked = false;
                 for (const j of idx) {
                     if (j === a || j === b || j === c)
                         continue;
                     const c1 = cross(p[a], p[b], p[j]) * sign, c2 = cross(p[b], p[c], p[j]) * sign, c3 = cross(p[c], p[a], p[j]) * sign;
-                    if (c1 >= -EPS && c2 >= -EPS && c3 >= -EPS) {
+                    if (c1 >= -areaEps && c2 >= -areaEps && c3 >= -areaEps) {
                         blocked = true;
                         break;
                     }
@@ -101,7 +118,7 @@
                 }
             }
             if (!found) { /* Remove collinear vertices, never fabricate a fan for a bad polygon. */
-                let k = idx.findIndex((b, i) => Math.abs(cross(p[idx[(i + idx.length - 1) % idx.length]], p[b], p[idx[(i + 1) % idx.length]])) < EPS);
+                let k = idx.findIndex((b, i) => Math.abs(cross(p[idx[(i + idx.length - 1) % idx.length]], p[b], p[idx[(i + 1) % idx.length]])) <= areaEps);
                 if (k >= 0)
                     idx.splice(k, 1);
                 else
@@ -146,6 +163,9 @@
             for (const k of ['zoom', 'yaw', 'pitch'])
                 if (Number.isFinite(s[k]))
                     this[k] = s[k];
+            /* restore() also receives untrusted camera data from project files,
+               so keep it inside the same bounds enforced by zoomAt(). */
+            this.zoom = Math.max(1e-7, Math.min(1e7, this.zoom));
             this.perspective = !!s.perspective;
         } this.update(); }
     }
