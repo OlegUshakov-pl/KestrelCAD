@@ -32,8 +32,9 @@ const spline = (cps, degree = 3, weights = null) => {
 const verticalLine = x => ({ type: 'LINE', id: 'CUT', points: [[x, -100, 0], [x, 100, 0]] });
 const evalAt = (e, t) => G.nurbs(e, t);
 
+const results = [];
 let pass = 0;
-const test = (name, fn) => { try { fn(); pass++; console.log('PASS', name); } catch (e) { console.error('FAIL', name, '\n ', e.message); process.exitCode = 1; } };
+const test = (name, fn) => { try { fn(); pass++; results.push({ name, status: 'passed' }); console.log('PASS', name); } catch (e) { results.push({ name, status: 'failed', error: e.message }); console.error('FAIL', name, '\n ', e.message); process.exitCode = 1; } };
 
 // Wavy cubic spline with 5 control points.
 const CP = [[0, 0, 0], [25, 40, 0], [50, -40, 0], [75, 40, 0], [100, 0, 0]];
@@ -253,4 +254,7 @@ test('explicit foreign cutter ignores the spline self-crossing', () => {
     assert.ok(ends.every(q => V.dist(q, [50, 50, 0]) > 1), 'no cut on the ignored self-crossing');
 });
 
+const failed = results.filter(r => r.status === 'failed').length;
+fs.mkdirSync(path.join(__dirname, 'results'), { recursive: true });
+fs.writeFileSync(path.join(__dirname, 'results', 'trim-spline-results.json'), JSON.stringify({ suite: 'trim-spline regression tests', passed: results.length - failed, failed, tests: results }, null, 2));
 console.log('\ntrim spline: ' + pass + ' passed');

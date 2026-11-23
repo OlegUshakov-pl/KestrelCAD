@@ -28,8 +28,9 @@ function mock(entities = []) {
 }
 const verticalLine = x => ({ type: 'LINE', id: 'CUT', points: [[x, -50, 0], [x, 150, 0]] });
 
+const results = [];
 let pass = 0;
-const test = (name, fn) => { try { fn(); pass++; console.log('PASS', name); } catch (e) { console.error('FAIL', name, '\n ', e.message); process.exitCode = 1; } };
+const test = (name, fn) => { try { fn(); pass++; results.push({ name, status: 'passed' }); console.log('PASS', name); } catch (e) { results.push({ name, status: 'failed', error: e.message }); console.error('FAIL', name, '\n ', e.message); process.exitCode = 1; } };
 
 test('L-shaped open polyline splits into two pieces between two cutters', () => {
     const pl = { type: 'POLYLINE', id: 'P1', points: [[0, 0, 0], [100, 0, 0], [100, 100, 0]], closed: false };
@@ -147,4 +148,7 @@ test('explicit foreign cutter still wins when the target crosses itself', () => 
     near(b[0], [30, 70]); near(b[1], [0, 100]);
 });
 
+const failed = results.filter(r => r.status === 'failed').length;
+fs.mkdirSync(path.join(__dirname, 'results'), { recursive: true });
+fs.writeFileSync(path.join(__dirname, 'results', 'trim-polyline-results.json'), JSON.stringify({ suite: 'trim-polyline regression tests', passed: results.length - failed, failed, tests: results }, null, 2));
 console.log('\ntrim polyline: ' + pass + ' passed');

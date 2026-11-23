@@ -37,8 +37,9 @@ const P = pseudo => { assert.equal(pseudo.type, 'POLYLINE'); assert.equal(pseudo
 const area = poly => Math.abs(polygonArea(poly));
 const HALF = Math.PI * 900 / 2;
 
+const results = [];
 let pass = 0;
-const test = (name, fn) => { try { fn(); pass++; console.log('PASS', name); } catch (e) { console.error('FAIL', name, '\n ', e.message); process.exitCode = 1; } };
+const test = (name, fn) => { try { fn(); pass++; results.push({ name, status: 'passed' }); console.log('PASS', name); } catch (e) { results.push({ name, status: 'failed', error: e.message }); console.error('FAIL', name, '\n ', e.message); process.exitCode = 1; } };
 
 test('region of four lines is detected inside', () => {
     const app = mockApp([line([0, 0, 0], [100, 0, 0]), line([100, 0, 0], [100, 50, 0]), line([100, 50, 0], [0, 50, 0]), line([0, 50, 0], [0, 0, 0])]);
@@ -141,4 +142,7 @@ test('two intersecting tessellated circles: bowl region below', () => {
     assert.ok(a > 100, 'bowl should have area, got ' + a.toFixed(1));
 });
 
+const failed = results.filter(r => r.status === 'failed').length;
+fs.mkdirSync(path.join(__dirname, 'results'), { recursive: true });
+fs.writeFileSync(path.join(__dirname, 'results', 'hatch-region-results.json'), JSON.stringify({ suite: 'hatch-region regression tests', passed: results.length - failed, failed, tests: results }, null, 2));
 console.log('\nenclosingBoundary regression: ' + pass + ' passed');
