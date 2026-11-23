@@ -140,6 +140,15 @@ with sync_playwright() as p:
         fresh();command('DIM 0,0 100,0 -15');eq(state('kestrel.doc.entities[0].type'),'DIMENSION');near(state('kestrel.doc.entities[0].offset'),-15)
         action('text');submit({'text':'Editable annotation','height':8,'rotation':15});command('20,30');eq(state('kestrel.doc.entities[1].text'),'Editable annotation')
     test('dimension and text dialogs create editable annotations',dimensions_text)
+    def dimension_text_grip():
+        fresh();command('DIM 0,0 100,0 15');fit();select([0])
+        eq(state("kestrel.gripAt(kestrel.camera.project(kestrel.doc.geometry(kestrel.doc.entities[0]).texts[0].position))?.kind"),'dim-text')
+        before=state('kestrel.doc.geometry(kestrel.doc.entities[0]).texts[0].position')
+        start=screen(before);end=screen([before[0]+20,before[1]+30,0])
+        page.mouse.move(*start);page.mouse.down();page.mouse.move(*end,steps=8);page.mouse.up();page.wait_for_timeout(80)
+        after=state('kestrel.doc.geometry(kestrel.doc.entities[0]).texts[0].position')
+        near(after[0],before[0]+20,1);near(after[1],before[1]+30,1)
+    test('dragging a linear dimension text moves only its label',dimension_text_grip)
     def arrays():
         fresh();command('C 0,0 10');select([0]);action('array');submit({'columns':3,'rows':2,'dx':30,'dy':40});eq(count(),6);eq(len(set(state('kestrel.doc.entities.map(e=>e.id)'))),6);action('undo');eq(count(),1)
     test('rectangular array uses unique editable objects and one undo',arrays)

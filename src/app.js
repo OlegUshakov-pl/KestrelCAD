@@ -2946,12 +2946,14 @@
             return result.map(g => ({ ...g, e }));
         }
         gripAt(p) { if (this.doc.selection.size > 60)
-            return null; for (const e of this.doc.selected(true))
+            return null; let nearest = null, best = 7; for (const e of this.doc.selected(true))
             for (const grip of this.entityGrips(e)) {
-                const q = this.camera.project(grip.point);
-                if (Math.hypot(q[0] - p[0], q[1] - p[1]) <= 7)
-                    return grip;
-            } return null; }
+                const q = this.camera.project(grip.point), d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+                if (d <= best) {
+                    best = d;
+                    nearest = grip;
+                }
+            } return nearest; }
         moveGrip(original, grip, p) { const e = K.clone(original); if (grip.kind === 'translate')
             return G.transform(e, M.translation(...V.sub(p, grip.point))); if (grip.kind === 'point')
             e.points[grip.index] = p.slice();

@@ -36,6 +36,7 @@ test('nonpositive circle offset is rejected',()=>assert.throws(()=>G.offset({typ
 test('hatch line clipping stays inside its boundary',()=>{const g=G.geometry({type:'HATCH',points:square,pattern:'cross',spacing:2,angle:Math.PI/4});assert.ok(g.segments.length>8);for(const s of g.segments)for(const p of s)assert.ok(p[0]>=-1e-6&&p[0]<=10+1e-6&&p[1]>=-1e-6&&p[1]<=10+1e-6);});
 test('solid hatch produces filled triangles',()=>assert.equal(G.geometry({type:'HATCH',points:square,pattern:'solid'}).triangles.length,2));
 test('aligned dimension computes the true distance',()=>{const d=G.dimension({type:'DIMENSION',points:[[0,0,0],[3,4,0]],offset:10,textHeight:2,precision:3});assert.equal(d.text.text,'5.000');assert.equal(d.segments.length,7);});
+test('aligned dimension honors manually moved text position',()=>{const e={type:'DIMENSION',points:[[0,0,0],[100,0,0]],offset:10,textHeight:2,precision:2};const original=G.dimension(e).text.position;vec(G.dimension({...e,textPosition:[70,25,0]}).text.position,[70,25,0]);vec(original,G.dimension(e).text.position);});
 test('box has expected volume and 12 feature edges',()=>{const e=G.box([0,0,0],10,20,30);near(G.volume(e),6000);assert.equal(G.geometry(e).segments.length,12);assert.equal(G.geometry(e).triangles.length,12);});
 test('cylinder volume converges to analytic volume',()=>near(G.volume(G.cylinder([0,0,0],10,20,128)),Math.PI*100*20,3));
 test('cone volume converges to analytic volume',()=>near(G.volume(G.cylinder([0,0,0],10,20,128,0)),Math.PI*100*20/3,1));
