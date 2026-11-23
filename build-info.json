@@ -1,36 +1,64 @@
 {
   "application": "Kestrel CAD",
-  "built_utc": "2026-09-07T19:45:22.570723+00:00",
-  "tests": {
-    "browser-results": {
-      "passed": 51,
-      "failed": 0
-    },
-    "core-results": {
-      "passed": 59,
-      "failed": 0
-    },
-    "dxf-interop-results": {
-      "passed": 10,
-      "failed": 0
-    },
-    "production-browser-results": {
-      "passed": 16,
-      "failed": 0
-    },
-    "production-interop-results": {
-      "passed": 8,
-      "failed": 0
-    },
-    "production-results": {
-      "passed": 58,
-      "failed": 0
-    },
-    "server-results": {
-      "passed": 13,
-      "failed": 0
-    }
-  },
+  "status": "failed",
+  "started_utc": "2026-11-23T15:37:46.287767+00:00",
+  "source_commit": "local",
+  "source_head": "local",
+  "source_fingerprint": "785b2c7c60e10438e9b95c00f532b0746a45974adb9be53af86fdc9ffdd81092",
+  "python": "3.15.2",
   "webgpu_hardware_verified": false,
-  "native_dwg_codec_verified": false
+  "native_dwg_codec_verified": false,
+  "completed_commands": [
+    {
+      "command": [
+        "node",
+        "tests\\core.test.js"
+      ],
+      "seconds": 0.317
+    },
+    {
+      "command": [
+        "node",
+        "tests\\production.test.js"
+      ],
+      "seconds": 0.075
+    },
+    {
+      "command": [
+        "node",
+        "tests\\constraints.test.js"
+      ],
+      "seconds": 0.119
+    },
+    {
+      "command": [
+        "node",
+        "tests\\dynamic-blocks.test.js"
+      ],
+      "seconds": 0.077
+    },
+    {
+      "command": [
+        "node",
+        "tests\\exchange-fidelity.test.js"
+      ],
+      "seconds": 0.094
+    },
+    {
+      "command": [
+        "node",
+        "tests\\fields.test.js"
+      ],
+      "seconds": 0.1
+    },
+    {
+      "command": [
+        "node",
+        "tests\\fonts.test.js"
+      ],
+      "seconds": 0.064
+    }
+  ],
+  "error": "Test suite did not create a fresh result report: node tests\\hatch-region.test.js",
+  "finished_utc": "2026-11-23T15:37:47.203724+00:00"
 }
