@@ -29,8 +29,8 @@ K.installConstraintsUI=function(App){
   }ctx.restore();
  };
  const prior=App.prototype.run;
- App.prototype.run=async function(id){
-  if(!cmds.some(c=>c[0]===id)&&!id.startsWith('gc-'))return prior.call(this,id);
+ App.prototype.run=async function(id,...args){
+  if(!cmds.some(c=>c[0]===id)&&!id.startsWith('gc-'))return prior.call(this,id,...args);
   this.cancel(false);const app=this,doc=this.doc,field=(...a)=>this.field(...a),s=C.state(doc),sel=doc.selected(true);
   if(id==='constraint-add'||id.startsWith('gc-')){
    const ents=doc.entities.filter(e=>['LINE','POLYLINE','POINT','CIRCLE','ARC'].includes(e.type));if(!ents.length)throw Error('Draw sketch geometry first.');

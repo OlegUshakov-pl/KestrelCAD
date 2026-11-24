@@ -2,7 +2,7 @@
 
 Use **Text → Find / replace text**, `FIND`, `REPLACE`, `FINDTEXT`, or Ctrl/Cmd+F while the drawing viewport has focus. Text-input controls keep their normal shortcut behavior.
 
-Find scans visible TEXT, MTEXT, leader text, explicit dimension text overrides, TABLE cells and top-level INSERT attributes. Optional settings restrict results to the original selection, a specific annotation type, exact case or whole Unicode words. Locked and hidden content can be included for discovery but is never made editable by the search command. Search does not modify shared block definitions, nested block/xref content, names, URLs, dimension-generated measurement labels or drawing metadata.
+Find scans visible TEXT, MTEXT, leader text, explicit dimension text overrides, dimension tolerances (as a separate `tolerance` target), position callout numbers, TABLE cells and top-level INSERT attributes. Optional settings restrict results to the original selection, a specific annotation type, exact case or whole Unicode words. Locked and hidden content can be included for discovery but is never made editable by the search command. Search does not modify shared block definitions, nested block/xref content, names, URLs, dimension-generated measurement labels or drawing metadata.
 
 The query is literal text, not a regular expression or wildcard program. Punctuation and replacement strings such as `$&` have no special expansion. Case-insensitive matching follows JavaScript Unicode case folding; whole-word boundaries include letters, numbers, combining marks and underscores. Searching follows stored logical text order, including right-to-left text, rather than screen glyph order. Normalization-equivalent spellings and locale-specific linguistic matching are not inferred.
 

@@ -5,7 +5,16 @@
     const G = K.Geo, clone = K.clone, owners = new WeakMap();
     const baseGeometry = G.geometry, baseTransform = G.transform, baseDimension = G.dimension;
     const MM = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8, unitless: 1 };
-    const CUSTOM = new Set(['INSERT', 'TABLE', 'LEADER']);
+    const CUSTOM = new Set(['INSERT', 'TABLE', 'LEADER', 'ROUGHNESS', 'POSITION']);
+    const ROUGHNESS_VALUES = ['Ra 1.6', 'Ra 3.2', 'Ra 6.3', 'Ra 12.5'];
+    const ROUGHNESS_STYLES = new Set(['plain', 'removal', 'no-removal']);
+    const TOLERANCE_MODES = new Set(['right', 'parentheses']);
+    const toleranceLabel = (e, label) => !e.tolerance ? label : e.tolerancePosition === 'parentheses' ? label + ' (' + e.tolerance + ')' : label + ' ' + e.tolerance;
+    function tolerance(value) {
+        if (value === undefined || value === null || value === '') return undefined;
+        if (typeof value !== 'string' || !/^[a-zA-Z0-9]{1,4}$/.test(value)) throw Error('Invalid tolerance. Use 1–4 letters or digits (for example H7, g6, 7).');
+        return value;
+    }
     const num = (x, label = 'Number', min = -1e12, max = 1e12) => {
         if (typeof x !== 'number' || !Number.isFinite(x) || x < min || x > max) throw Error(label + ' is outside its supported range.');
         return x;
@@ -94,6 +103,23 @@
             if (!Array.isArray(e.points) || e.points.length < 2 || e.points.length > 10000) throw Error('Invalid leader points.'); e.points.forEach(point);
             if (typeof e.text !== 'string' || e.text.length > 10000) throw Error('Invalid leader text.');
         }
+        if (e.type === 'ROUGHNESS') {
+            point(e.position);
+            if (e.normal) point(e.normal);
+            if (e.tangent) point(e.tangent);
+            num(e.height, 'Symbol height', 1e-7, 1e9);
+            if (typeof e.text !== 'string' || e.text.length > 100) throw Error('Invalid roughness value.');
+            if (!ROUGHNESS_STYLES.has(e.style)) throw Error('Invalid roughness symbol type.');
+            if (e.flipped !== undefined && typeof e.flipped !== 'boolean') throw Error('Invalid roughness flip flag.');
+        }
+        if (e.type === 'POSITION') {
+            if (!Array.isArray(e.points) || e.points.length !== 2) throw Error('A position callout needs an anchor and a number point.');
+            e.points.forEach(point);
+            num(e.textHeight, 'Callout text height', 1e-7, 1e9);
+            if (typeof e.text !== 'string' || e.text.length > 1000) throw Error('Invalid callout number.');
+            if (!['circle', 'line'].includes(e.form)) throw Error('Invalid callout form.');
+            if (!['arrow', 'dot'].includes(e.end)) throw Error('Invalid callout end.');
+        }
         if (e.loops) { if (!Array.isArray(e.loops) || e.loops.length > 512) throw Error('Invalid hatch loops.'); for (const loop of e.loops) { if (!Array.isArray(loop) || loop.length < 3 || loop.length > 10000) throw Error('Invalid hatch loop.'); loop.forEach(point); } }
         if (e.anchors) {
             if (!Array.isArray(e.anchors) || e.anchors.length > 100) throw Error('Invalid anchors.');
@@ -101,6 +127,8 @@
         }
         if (e.kind && e.type === 'DIMENSION' && !['aligned', 'linear', 'radius', 'diameter', 'angular', 'ordinate-x', 'ordinate-y'].includes(e.kind)) throw Error('Unknown dimension mode.');
         if (e.type === 'DIMENSION') for (const k of ['prefix', 'suffix']) if (e[k] !== undefined && (typeof e[k] !== 'string' || e[k].length > 255)) throw Error('Invalid dimension affix.');
+        if (e.type === 'DIMENSION' && e.tolerance !== undefined) tolerance(e.tolerance);
+        if (e.type === 'DIMENSION' && e.tolerancePosition !== undefined && !TOLERANCE_MODES.has(e.tolerancePosition)) throw Error('Invalid tolerance display mode.');
         if (e.type === 'DIMENSION' && e.textRotate !== undefined && e.textRotate !== 'standard' && e.textRotate !== 'horizontal') throw Error('Invalid dimension text rotation.');
         if (e.type === 'DIMENSION' && e.arrowOutside !== undefined && typeof e.arrowOutside !== 'boolean') throw Error('Invalid dimension arrow placement.');
         if (e.measureAxis) point(e.measureAxis);
@@ -215,7 +243,7 @@
     }
     function dimension(e) {
         const doc = owners.get(e), style = doc?.production?.dimstyles.find(s => s.name === e.dimstyle), v = { ...style, ...e };
-        if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); return result; }
+        if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); result.text.text = toleranceLabel(e, result.text.text); return result; }
         const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [], outside = e.arrowOutside === true;
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
@@ -226,7 +254,7 @@
             const rd = isVert ? [0, 1, 0] : (u[0] < 0 ? V.mul(u, -1) : u);
             direction = rd;
             const rside = isVert ? [-1, 0, 0] : V.norm(V.cross(n, rd));
-            const label = e.text || text; position = V.add(V.lerp(a, b, .5), V.mul(rside, isVert ? h * (.24 + .12 * label.length) : h * .24));
+            const label = toleranceLabel(e, e.text || text); position = V.add(V.lerp(a, b, .5), V.mul(rside, isVert ? h * (.24 + .12 * label.length) : h * .24));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
             segments.push([other, q]); arrow(q, other, outside ? -1 : 1, outside ? h * .5 : 0); if (e.kind === 'diameter') arrow(other, q, outside ? -1 : 1, outside ? h * .5 : 0);
@@ -253,7 +281,7 @@
         if (isVertical) { rotation = Math.PI / 2; direction = [0, 1, 0]; }
         else { if (direction[0] < 0) direction = V.mul(direction, -1); rotation = Math.atan2(direction[1], direction[0]); }
         if (e.textRotate === 'horizontal') { rotation = 0; direction = [1, 0, 0]; }
-        return { segments, triangles, text: { position: e.textPosition || position, text: e.text || text, height: h, direction, normal: n, rotation, align: 'center' } };
+        return { segments, triangles, text: { position: e.textPosition || position, text: toleranceLabel(e, e.text || text), height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
         const loops = e.loops || [e.points], b = basis(e.normal || [0, 0, 1]), origin = loops[0][0];
@@ -294,12 +322,71 @@
         for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) out.texts.push({ type: 'TEXT', position: at((j + .08) * cw, (i + .7) * rh), text: e.cells[i][j], height: e.textHeight || rh * .45, normal: axes.n, direction: axes.x, rotation: e.rotation || 0 });
         out.points = out.segments.flat(); out.snaps = [{ point: e.position, type: 'insertion' }]; return out;
     }
+    function roughnessGeometry(e) {
+        const out = empty(), p = e.position, n = V.norm(e.normal || [0, 0, 1]);
+        let t = e.tangent ? V.norm(e.tangent) : basis(n).x;
+        if (V.len(t) < EPS || Math.abs(V.dot(t, n)) > .99) t = basis(n).x;
+        let side = V.sub(n, V.mul(t, V.dot(n, t)));
+        if (V.len(side) < EPS)
+            side = V.cross(n, t);
+        side = V.norm(side);
+        const dir = e.flipped ? V.mul(side, -1) : side, h = e.height || 10;
+        const at = (x, y) => V.add(p, V.add(V.mul(t, x), V.mul(dir, y)));
+        const a = at(-h * .38, h * .9), b = at(h * .3, h * 1.55), c = at(h * 1.15, h * 1.55);
+        out.segments.push([p, a], [a, b], [b, c]);
+        if (e.style === 'removal')
+            out.segments.push([at(-h * .55, h * 1.25), at(h * .95, h * 1.25)]);
+        if (e.style === 'no-removal') {
+            const center = at(h * .26, h * 1.3), r = h * .42;
+            for (let i = 0; i < 16; i++) {
+                const a0 = i / 16 * TAU, a1 = (i + 1) / 16 * TAU;
+                out.segments.push([V.add(center, V.add(V.mul(t, Math.cos(a0) * r), V.mul(dir, Math.sin(a0) * r))), V.add(center, V.add(V.mul(t, Math.cos(a1) * r), V.mul(dir, Math.sin(a1) * r)))]);
+            }
+        }
+        out.texts.push({ position: at(h * .3, h * (e.style === 'plain' ? 2.3 : 2.7)), text: e.text, height: h * .72, direction: t, normal: n, align: 'center' });
+        out.points = [p]; out.snaps = [{ point: p, type: 'insertion' }];
+        return out;
+    }
+    function positionGeometry(e) {
+        const out = empty(), [a, b] = e.points, h = e.textHeight || 10, delta = V.sub(b, a);
+        if (V.len(delta) < EPS) return out;
+        const u = V.norm(delta), side = V.norm(V.cross([0, 0, 1], u));
+        out.segments.push([a, b]);
+        if (e.end === 'arrow') {
+            const w1 = V.add(a, V.add(V.mul(u, h * .85), V.mul(side, h * .22))), w2 = V.add(a, V.add(V.mul(u, h * .85), V.mul(side, -h * .22)));
+            out.segments.push([a, w1], [a, w2]); out.triangles.push({ points: [a, w1, w2], normal: [0, 0, 1] });
+        }
+        else {
+            const r = Math.max(h * .18, 1e-6), circle = i => V.add(a, V.add(V.mul([1, 0, 0], Math.cos(i / 12 * TAU) * r), V.mul([0, 1, 0], Math.sin(i / 12 * TAU) * r)));
+            for (let i = 0; i < 12; i++) {
+                out.segments.push([circle(i), circle(i + 1)]);
+                out.triangles.push({ points: [a, circle(i), circle(i + 1)], normal: [0, 0, 1] });
+            }
+        }
+        if (e.form === 'circle') {
+            const r = Math.max(h * .85, 1e-6);
+            for (let i = 0; i < 24; i++) {
+                const a0 = i / 24 * TAU, a1 = (i + 1) / 24 * TAU;
+                out.segments.push([V.add(b, [Math.cos(a0) * r, Math.sin(a0) * r, 0]), V.add(b, [Math.cos(a1) * r, Math.sin(a1) * r, 0])]);
+            }
+            out.texts.push({ position: b, text: e.text, height: h * .8, direction: [1, 0, 0], normal: [0, 0, 1], align: 'center' });
+        }
+        else {
+            const shelf = Math.abs(u[0]) > .25 ? V.norm([u[0], u[1], 0]) : [1, 0, 0];
+            out.segments.push([V.add(b, V.mul(shelf, -h)), V.add(b, V.mul(shelf, h))]);
+            out.texts.push({ position: V.add(b, [0, 0, h * .3]), text: e.text, height: h * .85, direction: [1, 0, 0], normal: [0, 0, 1], align: 'center' });
+        }
+        out.points = out.segments.flat(); out.snaps = [{ point: a, type: 'endpoint' }, { point: b, type: 'insertion' }];
+        return out;
+    }
     function geometry(e, tolerance = .5) {
         const doc = owners.get(e);
         if (e.type === 'INSERT') { if (!doc) return empty(); const out = empty(); for (const c of expand(doc, e, [], {n:0}, true)) { owners.set(c, doc); merge(out, G.geometry(c, tolerance)); } out.snaps.push({ point: M.point(e.matrix, [0, 0, 0]), type: 'insertion' }); return out; }
         if (e.type === 'TABLE') return tableGeometry(e);
         if (e.type === 'LEADER') { const out = empty(); for (let i = 1; i < e.points.length; i++) out.segments.push([e.points[i - 1], e.points[i]]); const a = e.points[0], u = V.norm(V.sub(e.points[1], a)), side = V.cross(e.normal || [0, 0, 1], u), h = e.textHeight || 2.5; out.segments.push([a, V.add(a, V.add(V.mul(u, h), V.mul(side, h / 4)))], [a, V.add(a, V.add(V.mul(u, h), V.mul(side, -h / 4)))]); out.texts.push({ position: e.points.at(-1), text: e.text, height: h, normal: e.normal }); out.points = out.segments.flat(); return out; }
         if (e.type === 'HATCH' && e.loops) return hatchGeometry(e);
+        if (e.type === 'ROUGHNESS') return roughnessGeometry(e);
+        if (e.type === 'POSITION') return positionGeometry(e);
         if (e.type === 'DIMENSION' && (e.kind || e.dimstyle)) { const d = dimension(e), out = empty(); out.segments = d.segments; out.triangles = d.triangles || []; out.texts = [d.text]; out.points = [...d.segments.flat(), d.text.position]; out.snaps = e.points.map(p => ({ point: p, type: 'endpoint' })); return out; }
         return baseGeometry(e, tolerance);
     }
@@ -309,6 +396,10 @@
         if (e.loops) out.loops = e.loops.map(loop => loop.map(p => M.point(matrix, p)));
         if (e.measureAxis) out.measureAxis = V.norm(M.point(matrix, e.measureAxis, 0));
         if (e.textPosition) out.textPosition = M.point(matrix, e.textPosition);
+        if (e.type === 'ROUGHNESS' && e.tangent) out.tangent = V.norm(M.point(matrix, e.tangent, 0));
+        const scale = e.type === 'ROUGHNESS' || e.type === 'POSITION' ? V.len(M.point(matrix, [0, 1, 0], 0)) : 0;
+        if (e.type === 'ROUGHNESS' && e.height) out.height = e.height * scale;
+        if (e.type === 'POSITION' && e.textHeight) out.textHeight = e.textHeight * scale;
         if (e.type === 'TABLE') {
             const a = G.textAxes(e), x = M.point(matrix, a.x, 0), y = M.point(matrix, a.y, 0); out.direction = V.norm(x); out.normal = V.norm(V.cross(x, y)); out.columnWidth *= V.len(x); out.rowHeight *= V.len(y);
         }
@@ -366,6 +457,6 @@
         const layout = { name: label, width: 420, height: 297, viewports: [{ x: 10, y: 10, width: 400, height: 265, center: [0,0,0], scale, locked: true, border: true, frozenLayers: [] }] }; validateLayout(layout);
         doc.transaction('Create layout', () => ensure(doc).layouts.push(layout)); return layout;
     }
-    K.Production = { defaults, ensure, bind, validate, validateEntity, CUSTOM, MM, num, point, name, frame, toWorld, toLocal, expand, renderEntities, defineBlock, insertBlock, explode, attach, reference, associations, dimension, hatchGeometry, flattenGeometry, stretch, breakEntity, align, validateLayout, layoutSVG, addLayout, owners };
+    K.Production = { defaults, ensure, bind, validate, validateEntity, CUSTOM, ROUGHNESS_VALUES, ROUGHNESS_STYLES, TOLERANCE_MODES, tolerance, toleranceLabel, roughnessGeometry, positionGeometry, MM, num, point, name, frame, toWorld, toLocal, expand, renderEntities, defineBlock, insertBlock, explode, attach, reference, associations, dimension, hatchGeometry, flattenGeometry, stretch, breakEntity, align, validateLayout, layoutSVG, addLayout, owners };
     G.geometry = geometry; G.transform = transform; G.dimension = dimension;
 })(typeof window !== 'undefined' ? window : globalThis);

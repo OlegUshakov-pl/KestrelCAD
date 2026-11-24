@@ -12,7 +12,10 @@
     U.groups.Drafting = [
         {name:'Blocks',large:['block-create','block-insert'],columns:[['block-edit','block-save','attributes']]},
         {name:'Annotation',columns:[['dim-linear','dim-radius','dim-diameter'],['dim-angular','dim-ordinate','dimstyles'],['leader','table','associative-hatch']]},
-        {name:'Modify',large:['stretch','break','align2']}, {name:'References',columns:[['xref-attach','xref-manager','ucs-manager']]}, {name:'Paper',large:['layout-manager','plot-layout']}
+        {name:'Modify',large:['stretch','break','align2']}, {name:'References',columns:[['xref-attach','xref-manager','ucs-manager']]}, {name:'Paper',large:['layout-manager','plot-layout']},
+        {name:'Surface finish',large:['roughness-16','roughness-32'],columns:[['roughness-63','roughness-125'],['roughness-settings']]},
+        {name:'Positions',large:['position'],columns:[['position-settings','repeat-last']]},
+        {name:'Tolerance & rotate',large:['dimension-tolerance'],columns:[['rotate-reference','tolerance']]}
     ];
     const number = (v, label, min, max) => P.num(Number(v),label,min,max);
     function xyz(s) { const p = String(s).split(',').map(x=>Number(x.trim())); if (p.length === 2) p.push(0); return P.point(p); }
@@ -68,11 +71,11 @@
             const previous=this.tool?.points.at(-1);if(previous&&(this.settings.ortho||this.settings.polar||this.shift)){const b=P.toLocal(this.doc,previous),dx=p[0]-b[0],dy=p[1]-b[1];if(this.settings.ortho||this.shift){if(Math.abs(dx)>Math.abs(dy))p[1]=b[1];else p[0]=b[0];}else{const step=this.settings.polarAngle*Math.PI/180,a=Math.round(Math.atan2(dy,dx)/step)*step,r=Math.hypot(dx,dy);p=[b[0]+Math.cos(a)*r,b[1]+Math.sin(a)*r,0];}}
             return P.toWorld(this.doc,p);
         };
-        App.prototype.run=async function(id){
-            const doc=this.doc;if(!doc)return originalRun.call(this,id);const p=P.ensure(doc), selected=doc.selected(true), ids=selected.map(e=>e.id), field=this.field.bind(this);
+        App.prototype.run=async function(id,...args){
+            const doc=this.doc;if(!doc)return originalRun.call(this,id,...args);const p=P.ensure(doc), selected=doc.selected(true), ids=selected.map(e=>e.id), field=this.field.bind(this);
             const selectedBlock=()=>{const e=selected.find(e=>e.type==='INSERT');if(!e)throw Error('Select a block reference.');return[e,p.blocks.find(b=>b.id===e.block)];};
             if(id==='explode'&&selected.some(e=>P.CUSTOM.has(e.type))){if(!selected.every(e=>P.CUSTOM.has(e.type)))throw Error('Select only production objects for this explode operation.');P.explode(doc,ids);return;}
-            if(!definitions.some(c=>c[0]===id))return originalRun.call(this,id);
+            if(!definitions.some(c=>c[0]===id))return originalRun.call(this,id,...args);
             this.cancel(false);
             switch(id){
             case 'block-create':this.dialog({title:'Create reusable block',html:`<p>${ids.length} selected object(s). The definition remains shared by all instances.</p><div class="form-grid">${field('name','Name','Block '+(p.blocks.length+1),'text')}${field('base','Base point XYZ','0,0,0','text')}</div>`,onSubmit:f=>{P.defineBlock(doc,f.name,ids,xyz(f.base));}});break;

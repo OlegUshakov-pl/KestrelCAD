@@ -450,7 +450,7 @@
                 if(attrs.length){base('SEQEND',e,owner);}
                 return;
             }
-            if (e.type === 'TABLE' || e.type === 'LEADER') { for(const c of K.Production.flattenGeometry(e,doc))writeEntity(c,owner); return; }
+            if (e.type === 'TABLE' || e.type === 'LEADER' || e.type === 'ROUGHNESS' || e.type === 'POSITION') { for(const c of K.Production.flattenGeometry(e,doc))writeEntity(c,owner); return; }
 
             if (e.type === 'LINE') {
                 base('LINE', e, owner);

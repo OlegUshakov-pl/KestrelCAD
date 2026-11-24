@@ -75,12 +75,13 @@
         }
     } return result; }
     function textAxes(e) { const b = basis(e.normal || [0, 0, 1]), r = e.rotation || 0, x = e.direction ? V.norm(e.direction) : V.add(V.mul(b.x, Math.cos(r)), V.mul(b.y, Math.sin(r))); return { x, y: V.norm(V.cross(b.n, x)), n: b.n }; }
+    const withTolerance = (e, label) => !e.tolerance ? label : e.tolerancePosition === 'parentheses' ? label + ' (' + e.tolerance + ')' : label + ' ' + e.tolerance;
     function dimension(e) { const a = e.points[0], b = e.points[1], d = V.sub(b, a), len = V.len(d), u = V.norm(d), n = V.norm(V.cross(e.normal || [0, 0, 1], u)), off = e.offset ?? len * .12, s = e.textHeight || Math.max(1, len * .025), aa = V.add(a, V.mul(n, off)), bb = V.add(b, V.mul(n, off)), mid = V.lerp(aa, bb, .5), flip = e.arrowOutside === true ? -1 : 1, tail = flip < 0 ? s * .5 : 0; const segments = [[V.add(a, V.mul(n, Math.sign(off) * s * .3)), V.add(aa, V.mul(n, Math.sign(off) * s * .8))], [V.add(b, V.mul(n, Math.sign(off) * s * .3)), V.add(bb, V.mul(n, Math.sign(off) * s * .8))], [aa, bb]]; const triangles = []; for (const [p, dir] of [[aa, 1], [bb, -1]]) {
         const w1 = V.add(p, V.add(V.mul(u, dir * flip * s), V.mul(n, s * .28))), w2 = V.add(p, V.add(V.mul(u, dir * flip * s), V.mul(n, -s * .28)));
         segments.push([p, w1]); segments.push([p, w2]);
         if (tail) segments.push([V.add(p, V.mul(u, dir * flip * s)), V.add(p, V.mul(u, dir * flip * (s + tail)))]);
         triangles.push({ points: [p, w1, w2], normal: e.normal || [0, 0, 1] });
-    } const isVertical = Math.abs(u[0]) < .3, label = e.text || ((e.prefix || '') + len.toFixed(e.precision ?? 0) + (e.suffix || '')), gap = isVertical ? s * (.24 + .12 * label.length) : s * .24;
+    } const isVertical = Math.abs(u[0]) < .3, label = withTolerance(e, e.text || ((e.prefix || '') + len.toFixed(e.precision ?? 0) + (e.suffix || ''))), gap = isVertical ? s * (.24 + .12 * label.length) : s * .24;
     const nn = e.normal || [0, 0, 1];
     let dir, side, rotation;
     if (isVertical) { dir = [0, 1, 0]; side = [-1, 0, 0]; rotation = Math.PI / 2; }
@@ -259,7 +260,7 @@
                 }
             }
         }
-        else if (['POLYLINE', 'HATCH', 'DIMENSION', 'TEXT'].includes(e.type)) {
+        else if (['POLYLINE', 'HATCH', 'DIMENSION', 'TEXT', 'ROUGHNESS', 'POSITION'].includes(e.type)) {
             const normal = e.normal || (e.type === 'HATCH' ? faceNormal(e.points) : [0, 0, 1]);
             out.normal = V.norm([inverse[0] * normal[0] + inverse[1] * normal[1] + inverse[2] * normal[2], inverse[4] * normal[0] + inverse[5] * normal[1] + inverse[6] * normal[2], inverse[8] * normal[0] + inverse[9] * normal[1] + inverse[10] * normal[2]]);
             if (e.type === 'POLYLINE' && e.bulges?.some(Boolean)) {

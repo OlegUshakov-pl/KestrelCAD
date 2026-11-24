@@ -21,8 +21,8 @@
     const note='<div class="dialog-note">Real curves, surfaces and topology are retained in native projects. The viewport uses a display mesh. Operations need the optional local OpenCascade engine; use the dedicated ACIS commands for planar SAT/SAB translation.</div>';
     K.installKernelUI=function(App){
         const run=App.prototype.run;
-        App.prototype.run=async function(id){
-            if(!commands.some(c=>c[0]===id))return run.call(this,id);
+        App.prototype.run=async function(id,...args){
+            if(!commands.some(c=>c[0]===id))return run.call(this,id,...args);
             this.cancel(false);const app=this,doc=this.doc,selected=doc.selected(true),field=(...a)=>this.field(...a),op=id.slice(6);
             const view=()=>{if(app.doc===doc){app.setView('iso');app.setStyle('shaded-edges');app.fit(false);}};
             const add=async(params,operation=op)=>{const rev=doc.revision;const result=await N.request(operation,[],params);if(rev!==doc.revision)throw Error('Drawing changed; retry the native operation.');doc.transaction('Native '+operation,()=>{const e=doc.add(N.body(result));doc.selection=new Set([e.id]);});view();};

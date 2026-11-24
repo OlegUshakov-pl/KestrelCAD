@@ -36,11 +36,12 @@ function visibleRaw(raw,rich=false){
  return {text,tokens};
 }
 function span(tokens,start,end){let low=0,high=tokens.length;while(low<high){const middle=(low+high)>>1;if(tokens[middle].to<=start)low=middle+1;else high=middle;}const out=[];for(let i=low;i<tokens.length&&tokens[i].from<end;i++)out.push(tokens[i]);return out;}
-const targetKey=t=>t.kind==='text'?'text':t.kind==='cell'?`cell:${t.row}:${t.column}`:`attribute:${t.tag}`;
-function rawValue(doc,e,t){if(t.kind==='text')return e.text||'';if(t.kind==='cell')return e.cells[t.row][t.column];const block=doc.production.blocks.find(b=>b.id===e.block),a=block?.attributes?.find(a=>a.tag===t.tag);let value=own(e.attributes||{},t.tag)?e.attributes[t.tag]:a?.value||'';if(block?.dynamic&&!e.fieldBindings?.some(f=>f.target===targetKey(t))){const values=K.DynamicBlocks.resolve(block,e.parameters||{}).values;value=value.replace(/\$\{([A-Za-z][A-Za-z0-9_]*)\}/g,(_,name)=>own(values,name)?String(values[name]):'${'+name+'}');}return value;}
-function assign(e,t,v){if(t.kind==='text')e.text=v;else if(t.kind==='cell')e.cells[t.row][t.column]=v;else{e.attributes=e.attributes||{};e.attributes[t.tag]=v;}}
+const targetKey=t=>t.kind==='text'?'text':t.kind==='tolerance'?'tolerance':t.kind==='cell'?`cell:${t.row}:${t.column}`:`attribute:${t.tag}`;
+function rawValue(doc,e,t){if(t.kind==='tolerance')return e.tolerance||'';if(t.kind==='text')return e.text||'';if(t.kind==='cell')return e.cells[t.row][t.column];const block=doc.production.blocks.find(b=>b.id===e.block),a=block?.attributes?.find(a=>a.tag===t.tag);let value=own(e.attributes||{},t.tag)?e.attributes[t.tag]:a?.value||'';if(block?.dynamic&&!e.fieldBindings?.some(f=>f.target===targetKey(t))){const values=K.DynamicBlocks.resolve(block,e.parameters||{}).values;value=value.replace(/\$\{([A-Za-z][A-Za-z0-9_]*)\}/g,(_,name)=>own(values,name)?String(values[name]):'${'+name+'}');}return value;}
+function assign(e,t,v){if(t.kind==='tolerance')e.tolerance=v;else if(t.kind==='text')e.text=v;else if(t.kind==='cell')e.cells[t.row][t.column]=v;else{e.attributes=e.attributes||{};e.attributes[t.tag]=v;}}
 function targets(doc,e){
- if(['TEXT','MTEXT','LEADER','DIMENSION'].includes(e.type))return [{kind:'text'}];
+ if(e.type==='DIMENSION'){const list=[{kind:'text'}];if(e.tolerance)list.push({kind:'tolerance'});return list;}
+ if(['TEXT','MTEXT','LEADER','POSITION'].includes(e.type))return [{kind:'text'}];
  if(e.type==='TABLE')return e.cells.flatMap((row,r)=>row.map((_,c)=>({kind:'cell',row:r,column:c})));
  if(e.type==='INSERT')return (doc.production.blocks.find(b=>b.id===e.block)?.attributes||[]).map(a=>({kind:'attribute',tag:a.tag}));return [];
 }
@@ -56,7 +57,7 @@ function search(doc,query,options={}){
  checked(query,'search text',LIMITS.query);if(!query)throw Error('Enter text to find.');
  for(const k of Object.keys(options))if(!['caseSensitive','wholeWord','includeHidden','includeLocked','selectionOnly','types'].includes(k))throw Error('Unknown search setting.');
  for(const k of ['caseSensitive','wholeWord','includeHidden','includeLocked','selectionOnly'])if(options[k]!==undefined&&typeof options[k]!=='boolean')throw Error('Invalid search setting.');
- if(options.types!==undefined&&(!Array.isArray(options.types)||options.types.some(t=>!['TEXT','MTEXT','LEADER','DIMENSION','TABLE','INSERT'].includes(t))))throw Error('Invalid annotation type.');
+ if(options.types!==undefined&&(!Array.isArray(options.types)||options.types.some(t=>!['TEXT','MTEXT','LEADER','DIMENSION','TABLE','INSERT','POSITION'].includes(t))))throw Error('Invalid annotation type.');
  const rows=[],entries=new Map();let scanned=0,characters=0,truncated=false;
  outer:for(const e of doc.entities){
   if(!options.includeHidden&&!doc.visible(e)||options.includeLocked===false&&doc.layer(e).locked||options.selectionOnly&&!doc.selection.has(e.id)||options.types&&!options.types.includes(e.type))continue;

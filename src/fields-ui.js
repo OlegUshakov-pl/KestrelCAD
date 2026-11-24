@@ -14,7 +14,7 @@ K.installFieldsUI=function(App){const run=App.prototype.run;
     App.prototype.textDialog=function(e){if(e?.fieldBindings?.some(b=>b.target==='text')){this.doc.selection=new Set([e.id]);return this.fieldDialog(e);}return oldText.call(this,e);};
     App.prototype.fieldDialog=function(host=null){
         const app=this,doc=this.doc,rev=doc.revision,field=this.field.bind(this),selected=doc.selected(true),sourceEntity=selected.find(e=>!F.HOSTS.has(e.type))||doc.entities.find(e=>!F.HOSTS.has(e.type));
-        if(!host)host=selected.find(e=>['TEXT','MTEXT','LEADER','TABLE'].includes(e.type)||e.type==='INSERT'&&doc.production.blocks.find(b=>b.id===e.block)?.attributes?.length);
+        if(!host)host=selected.find(e=>['TEXT','MTEXT','LEADER','TABLE','POSITION'].includes(e.type)||e.type==='INSERT'&&doc.production.blocks.find(b=>b.id===e.block)?.attributes?.length);
         const initialTarget=host?.type==='TABLE'?'cell:0:0':host?.type==='INSERT'?'attribute:'+doc.production.blocks.find(b=>b.id===host.block).attributes[0].tag:'text';
         const original=host?.fieldBindings?.[0],target=original?.target||initialTarget,first=original?.sources?.[0];
         const mode=original?.expression!=null||original?.sources?.length>1||first&&first.name!=='Value'||['field','aggregate'].includes(first?.kind)?'formula':first?.kind||(sourceEntity?'object':'drawing');

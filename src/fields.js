@@ -6,7 +6,7 @@
 'use strict';
 const K=root.Kestrel,P=K.Production,{V,M}=K.Math,own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const LIMITS=Object.freeze({bindings:4096,perEntity:2048,sources:32,depth:32,output:2000000,properties:128,tableRows:250});
-const HOSTS=new Set(['TEXT','MTEXT','LEADER','TABLE','INSERT']);
+const HOSTS=new Set(['TEXT','MTEXT','LEADER','TABLE','INSERT','POSITION']);
 const PROPERTIES=Object.freeze(['id','type','layer','block','length','area','volume','surfaceArea','radius','diameter','x','y','z','text','attribute','cell']);
 const DRAWING=Object.freeze(['name','units','entityCount']);
 const TOKENS=/\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g;
@@ -37,7 +37,7 @@ function source(s) {
 }
 function slot(e,target) {
     if(!HOSTS.has(e.type))throw Error('Fields require text, leader, table or block attribute hosts.');
-    if(target==='text'&&['TEXT','MTEXT','LEADER'].includes(e.type))return {get:()=>e.text,set:v=>{e.text=v;},limit:e.type==='MTEXT'?50000:e.type==='TEXT'?100000:10000};
+    if(target==='text'&&['TEXT','MTEXT','LEADER','POSITION'].includes(e.type))return {get:()=>e.text,set:v=>{e.text=v;},limit:e.type==='MTEXT'?50000:e.type==='TEXT'?100000:10000};
     const match=typeof target==='string'&&/^cell:(\d+):(\d+)$/.exec(target);
     if(match&&e.type==='TABLE') {
         const r=Number(match[1]),c=Number(match[2]);

@@ -18,6 +18,7 @@ The earlier conversation described a v2 package, but the package was not retaine
 | XATTACH, XREF | Local native/DXF reference snapshots; explicit reload, unload, load, bind, detach. File data is not fetched from a remote URL. |
 | UCS | Orthonormal drawing plane; plane-aware numeric input, snapping and basic creation tools. |
 | LAYOUT, PLOT | Persistent millimeter paper sizes, independent clipped top-view viewports, per-viewport scales and frozen layers. Physically dimensioned SVG and browser print preview. |
+| TOLERANCE, ROUGHNESS, POSITION, ROTATEP, REPEAT | Dimension tolerance text (right/parentheses, FIND/REPLACE target); GOST-style roughness symbols oriented by surface normal with mirroring; numbered balloon callouts with circle/shelf and arrow/dot options; rotation from a reference direction; parameterized command repeat from the right-click menu. See [Manufacturing](MANUFACTURING.md). |
 
 Transactions include production metadata. Failed validation rolls back the document. Definition cycles, missing references, singular/projective matrices, malformed geometry, excessive hatch complexity and invalid table/layout/style data are rejected.
 
@@ -29,7 +30,7 @@ An initial UI wrapper dropped the screen-coordinate argument to `acceptPoint`. E
 
 The DXF writer emits real BLOCK/BLOCK_RECORD/INSERT and ATTDEF/ATTRIB records. Named shared blocks and per-instance attribute values survive a native→DXF→native round trip. Non-orthogonal block transforms cannot be represented as ordinary INSERT transforms and are explicitly expanded to geometry on export.
 
-Polyline hatch boundary islands survive DXF exchange. Linear and aligned DIMENSION objects are supported. Other newly-created dimension modes, tables and leaders export as display geometry, **not** native AutoCAD objects. Dimension style round-trip is not complete. References become ordinary blocks in DXF; their external attachment semantics are native-only. UCS, associations and paper layout metadata are native-only in this PR. There is no lossless arbitrary DWG/DXF claim.
+Polyline hatch boundary islands survive DXF exchange. Linear and aligned DIMENSION objects are supported. Other newly-created dimension modes, tables and leaders export as display geometry, **not** native AutoCAD objects. Dimension style round-trip is not complete. References become ordinary blocks in DXF; their external attachment semantics are native-only. UCS, associations and paper layout metadata are native-only in this PR. Roughness symbols and position callouts export as flattened LINE/TEXT/3DFACE geometry; dimension tolerance is part of the dimension TEXT and needs no custom DXF extension. Numerical ISO 286 limit deviations are not calculated. There is no lossless arbitrary DWG/DXF claim.
 
 Block editing updates geometry, layers and dimension styles. Defining new nested blocks within an active block-edit session is not supported. Block appearance is grouped at reference level in the current renderer. AutoCAD dynamic action graphs are not implemented here.
 

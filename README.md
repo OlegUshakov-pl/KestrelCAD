@@ -8,6 +8,8 @@ Local-first 2D drafting and 3D modeling in plain HTML, CSS and JavaScript. A cus
 
 Branch builds are not the live site: changes merge into `main` before GitHub Pages publishes them. This is an original Kestrel application, not an Autodesk product or a feature-complete AutoCAD replacement — the honest boundaries are stated in each section below.
 
+**Current highlights:** parametric and assembly constraints, configurable blocks, native B-rep modeling, rich MTEXT/fields/search, source-faithful DXF exchange, and a manufacturing annotation toolset — dimension tolerances, GOST-style roughness symbols, numbered position callouts, rotate-by-reference points and right-click command repeat. Each addition keeps native `.kcad` persistence, atomic undo/redo, clipboard support and static DXF export.
+
 ## Quick start
 
 No runtime dependencies. The application needs only a browser; the server is pure Python standard library.
@@ -54,11 +56,15 @@ The **Drafting** ribbon tab adds shared blocks and attributes, extra dimension m
 
 See [command-by-command review](docs/V2-REVIEW.md) for boundaries and known gaps.
 
+## Manufacturing drafting
+
+The **Drafting** ribbon tab adds machine-drawing annotations: dimension tolerances (`TOLERANCE`), four standard roughness symbols (`Ra 1.6` / `Ra 3.2` / `Ra 6.3` / `Ra 12.5`), numbered position callouts (`POSITION`) with circle/shelf and arrow/dot options, rotation by reference points (`ROTATEP`), and **Repeat: …** as the first item of the right-click menu (`REPEAT`). Tolerances display to the right of the dimension or in parentheses, follow associative geometry, and participate in FIND/REPLACE; roughness marks orient by the surface normal and can be mirrored; callout numbers auto-increment and can host associative fields. All objects persist in `.kcad`, undo atomically, copy through the clipboard, edit in the Properties panel and export to DXF as static geometry. [Workflows and limits](docs/MANUFACTURING.md).
+
 ## Rich annotations: MTEXT, fields, search
 
 - **MTEXT** creates native rich annotations (formatting fractions, paragraphs, masks, native columns, bidirectional runs) that persist through saves and undo; single-column DXF export stays genuine MTEXT. [MTEXT commands](docs/MTEXT.md).
-- **FIELD** binds TEXT/MTEXT, leaders, table cells and INSERT attributes to measurements, drawing/Custom properties, named parameters, aggregates and safe formulas; source edits update labels in the same undo step. Native-body quantity fields cover validated volume/area with unit conversion, and `FIELDTABLE` builds linked schedules. [Field authoring and schema](docs/FIELDS.md).
-- **`FIND` / `REPLACE` / Ctrl+F** search visible annotation content, preserve rich MTEXT controls during replacement, protect linked fields and locked objects, and group changes into one undo step. [Scopes and safety](docs/TEXT-SEARCH.md).
+- **FIELD** binds TEXT/MTEXT, leaders, position callouts, table cells and INSERT attributes to measurements, drawing/Custom properties, named parameters, aggregates and safe formulas; source edits update labels in the same undo step. Native-body quantity fields cover validated volume/area with unit conversion, and `FIELDTABLE` builds linked schedules. [Field authoring and schema](docs/FIELDS.md).
+- **`FIND` / `REPLACE` / Ctrl+F** search visible annotation content (including dimension tolerances), preserve rich MTEXT controls during replacement, protect linked fields and locked objects, and group changes into one undo step. [Scopes and safety](docs/TEXT-SEARCH.md).
 
 ## Parametric sketching
 
@@ -111,7 +117,7 @@ python3 tools/verify.py --previews
 
 - Set `CHROMIUM_PATH` when Chromium is not at `/usr/bin/chromium`, and `KESTREL_TEST_URL=http://localhost:8642/` to test a served application instead of the standalone HTML. Fresh results land in `tests/results/`; `build-info.json` is generated during verification.
 - Playwright and ezdxf are test-only; CadQuery is an optional local modeling dependency, never downloaded by the browser.
-- Plain-Node suites (`tests/*.test.js`, run with `node tests/<name>.test.js`) cover fonts, mtext, constraints, blocks and more; `tests/*.browser.py` drive the real UI through Playwright, and ezdxf audit scripts independently verify DXF exchange. The native browser suite exercises the actual localhost worker.
+- Plain-Node suites (`tests/*.test.js`, run with `node tests/<name>.test.js`) cover fonts, mtext, constraints, blocks, manufacturing annotations and more; `tests/*.browser.py` drive the real UI through Playwright, and ezdxf audit scripts independently verify DXF exchange. The native browser suite exercises the actual localhost worker.
 
 ## Source layout
 
@@ -129,7 +135,7 @@ python3 tools/verify.py --previews
 
 ## Documentation index
 
-Core workflows: [V2 review](docs/V2-REVIEW.md) · [Parametric](docs/PARAMETRIC.md) · [Dynamic blocks](docs/DYNAMIC-BLOCKS.md) · [Polar blocks](docs/POLAR-BLOCKS.md) · [Polar stretch](docs/POLAR-STRETCH.md) · [Native solids](docs/NATIVE-SOLIDS.md) · [Native curves](docs/NATIVE-CURVES.md) · [Native analysis](docs/NATIVE-ANALYSIS.md) · [Native editing](docs/NATIVE-EDITING.md) · [Spatial constraints](docs/SPATIAL-CONSTRAINTS.md) · [Joint limits](docs/JOINT-LIMITS.md)
+Core workflows: [V2 review](docs/V2-REVIEW.md) · [Manufacturing](docs/MANUFACTURING.md) · [Parametric](docs/PARAMETRIC.md) · [Dynamic blocks](docs/DYNAMIC-BLOCKS.md) · [Polar blocks](docs/POLAR-BLOCKS.md) · [Polar stretch](docs/POLAR-STRETCH.md) · [Native solids](docs/NATIVE-SOLIDS.md) · [Native curves](docs/NATIVE-CURVES.md) · [Native analysis](docs/NATIVE-ANALYSIS.md) · [Native editing](docs/NATIVE-EDITING.md) · [Spatial constraints](docs/SPATIAL-CONSTRAINTS.md) · [Joint limits](docs/JOINT-LIMITS.md)
 
 Data and fidelity: [Source documents](docs/SOURCE-DOCUMENTS.md) · [Exchange fidelity](docs/EXCHANGE-FIDELITY.md) · [ACIS exchange](docs/ACIS-EXCHANGE.md) · [MTEXT](docs/MTEXT.md) · [Fields](docs/FIELDS.md) · [Insert fields](docs/INSERT-FIELDS.md) · [Text search](docs/TEXT-SEARCH.md) · [Fonts](docs/FONTS.md) · [Feature matrix](docs/FEATURE-MATRIX.md) · [Productivity](docs/PRODUCTIVITY.md) · [Productivity integration](docs/PRODUCTIVITY-INTEGRATION.md)
 

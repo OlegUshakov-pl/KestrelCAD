@@ -15,7 +15,7 @@
         { id: 'hatch', name: 'A-HATCH', color: '#687d91', visible: true, locked: false, linetype: 'Continuous', lineweight: .13 },
         { id: 'construction', name: 'A-CENTER', color: '#c69a66', visible: true, locked: false, linetype: 'Center', lineweight: .13 }
     ];
-    const TYPES = new Set(['LINE', 'POLYLINE', 'CIRCLE', 'ARC', 'ELLIPSE', 'SPLINE', 'HATCH', 'POINT', 'TEXT', 'MTEXT', 'DIMENSION', 'MESH', 'INSERT', 'TABLE', 'LEADER']);
+    const TYPES = new Set(['LINE', 'POLYLINE', 'CIRCLE', 'ARC', 'ELLIPSE', 'SPLINE', 'HATCH', 'POINT', 'TEXT', 'MTEXT', 'DIMENSION', 'MESH', 'INSERT', 'TABLE', 'LEADER', 'ROUGHNESS', 'POSITION']);
     function validate(data, definition = false) {
         if (!data || typeof data !== 'object' || data.format !== 'kestrel-cad' || ![1, 2].includes(data.version))
             throw Error('This is not a supported Kestrel CAD project (version 1 or 2).');

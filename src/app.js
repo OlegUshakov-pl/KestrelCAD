@@ -31,6 +31,7 @@
             this.explorerTab = 'layers';
             this.tool = null;
             this.lastTool = 'line';
+            this.lastCommand = null;
             this.lastPoint = [0, 0, 0];
             this.pointer = { x: 0, y: 0, world: [0, 0, 0], inside: false };
             this.drag = null;
@@ -403,8 +404,8 @@
                 this.doc.selection = new Set([id]);
             this.selectionChanged();
         } }
-        entityLabel(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'Vertical dimension' : 'Horizontal dimension'; if (e.type === 'DIMENSION' && e.kind === 'angular') return 'Angular dimension'; if (e.type === 'DIMENSION' && e.kind === 'radius') return 'Radius dimension'; if (e.type === 'DIMENSION' && e.kind === 'diameter') return 'Diameter dimension'; return e.type === 'MESH' ? (e.primitive || 'Mesh solid') : ({ LINE: 'Line', POLYLINE: 'Polyline', CIRCLE: 'Circle', ARC: 'Arc', ELLIPSE: 'Ellipse', SPLINE: 'Spline', TEXT: 'Text', DIMENSION: 'Aligned dimension', HATCH: 'Hatch', POINT: 'Point' }[e.type] || e.type); }
-        entityIcon(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'dim-vertical' : 'dim-horizontal'; if (e.type === 'DIMENSION' && ['angular', 'radius', 'diameter'].includes(e.kind)) return 'dim-' + e.kind; return e.type === 'MESH' ? 'box' : ({ LINE: 'line', POLYLINE: 'polyline', CIRCLE: 'circle', ARC: 'arc', ELLIPSE: 'ellipse', SPLINE: 'spline', TEXT: 'text', DIMENSION: 'dimension', HATCH: 'hatch', POINT: 'point' }[e.type] || 'drawing'); }
+        entityLabel(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'Vertical dimension' : 'Horizontal dimension'; if (e.type === 'DIMENSION' && e.kind === 'angular') return 'Angular dimension'; if (e.type === 'DIMENSION' && e.kind === 'radius') return 'Radius dimension'; if (e.type === 'DIMENSION' && e.kind === 'diameter') return 'Diameter dimension'; return e.type === 'MESH' ? (e.primitive || 'Mesh solid') : ({ LINE: 'Line', POLYLINE: 'Polyline', CIRCLE: 'Circle', ARC: 'Arc', ELLIPSE: 'Ellipse', SPLINE: 'Spline', TEXT: 'Text', DIMENSION: 'Aligned dimension', HATCH: 'Hatch', POINT: 'Point', ROUGHNESS: e.text || 'Surface finish', POSITION: 'Position ' + (e.text || '') }[e.type] || e.type); }
+        entityIcon(e) { if (e.type === 'DIMENSION' && e.kind === 'linear' && e.measureAxis) return Math.abs(e.measureAxis[1]) > Math.abs(e.measureAxis[0]) ? 'dim-vertical' : 'dim-horizontal'; if (e.type === 'DIMENSION' && ['angular', 'radius', 'diameter'].includes(e.kind)) return 'dim-' + e.kind; return e.type === 'MESH' ? 'box' : ({ LINE: 'line', POLYLINE: 'polyline', CIRCLE: 'circle', ARC: 'arc', ELLIPSE: 'ellipse', SPLINE: 'spline', TEXT: 'text', DIMENSION: 'dimension', HATCH: 'hatch', POINT: 'point', ROUGHNESS: 'roughness', POSITION: 'position' }[e.type] || 'drawing'); }
         refreshRibbon() { if (!this.doc)
             return; const layer = $('ribbon-layer'); if (layer) {
             layer.innerHTML = this.doc.layers.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
@@ -617,6 +618,24 @@
                     html += input('Precision', 'precision', one.precision ?? this.defaults.precision, 'number', 'min="0" max="6" step="1"');
                     html += row('Text rotate', `<select data-prop="textRotate" aria-label="Text rotation">${['standard', 'horizontal'].map(v => `<option ${(one.textRotate || 'standard') === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`);
                     html += row('Arrows outside', `<input data-prop="arrowOutside" aria-label="Arrows outside" type="checkbox" ${one.arrowOutside ? 'checked' : ''}>`);
+                    html += input('Tolerance', 'tolerance', one.tolerance || '', 'text', 'maxlength="4" placeholder="H7"');
+                    html += row('Tolerance position', `<select data-prop="tolerancePosition" aria-label="Tolerance position">${[['right', 'Right of dimension'], ['parentheses', 'In parentheses']].map(([v, l]) => `<option value="${v}" ${(one.tolerancePosition || 'right') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+                }
+                else if (one.type === 'ROUGHNESS') {
+                    pos('Position', 'position', one.position);
+                    html += row('Value', `<select data-prop="roughnessValue" aria-label="Roughness value">${K.Production.ROUGHNESS_VALUES.map(v => `<option ${one.text === v ? 'selected' : ''}>${v}</option>`).join('')}<option ${K.Production.ROUGHNESS_VALUES.includes(one.text) ? '' : 'selected'}>Custom</option></select>`);
+                    html += input('Custom value', 'text', one.text || '', 'text', 'maxlength="100"');
+                    html += row('Symbol type', `<select data-prop="roughnessStyle" aria-label="Symbol type">${[['plain', 'No treatment specified'], ['removal', 'Material removal'], ['no-removal', 'No material removal']].map(([v, l]) => `<option value="${v}" ${(one.style || 'plain') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+                    html += row('Mirrored', `<input data-prop="flipped" aria-label="Mirror symbol" type="checkbox" ${one.flipped ? 'checked' : ''}>`);
+                    html += input('Symbol height', 'height', one.height || 10, 'number', 'min="0.0001"');
+                }
+                else if (one.type === 'POSITION') {
+                    pos('Anchor', 'points.0', one.points[0]);
+                    pos('Number at', 'points.1', one.points[1]);
+                    html += input('Number', 'text', one.text || '', 'text', 'maxlength="1000"');
+                    html += row('Number form', `<select data-prop="form" aria-label="Number form">${[['circle', 'Circle'], ['line', 'Shelf line']].map(([v, l]) => `<option value="${v}" ${(one.form || 'circle') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+                    html += row('Leader end', `<select data-prop="end" aria-label="Leader end">${[['arrow', 'Arrow'], ['dot', 'Dot']].map(([v, l]) => `<option value="${v}" ${(one.end || 'arrow') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+                    html += input('Text height', 'textHeight', one.textHeight || 10, 'number', 'min="0.0001"');
                 }
                 else if (one.type === 'MESH') {
                     const b = centerOf([one]);
@@ -695,7 +714,19 @@
                     target = target[p];
                 target[parts.at(-1)] = finite(value);
             }
-            else if (['layer', 'color', 'linetype', 'name', 'text', 'prefix', 'suffix', 'pattern'].includes(key)) {
+            else if (key === 'tolerance') {
+                if (value)
+                    e.tolerance = K.Production.tolerance(value);
+                else
+                    delete e.tolerance;
+            }
+            else if (key === 'roughnessValue') {
+                if (K.Production.ROUGHNESS_VALUES.includes(value))
+                    e.text = value;
+            }
+            else if (key === 'roughnessStyle')
+                e.style = value;
+            else if (['layer', 'color', 'linetype', 'name', 'text', 'prefix', 'suffix', 'pattern', 'tolerancePosition', 'form', 'end'].includes(key)) {
                 if (key === 'layer' && !value)
                     continue;
                 e[key] = value;
@@ -704,7 +735,7 @@
                 if (value === 'horizontal') e.textRotate = 'horizontal';
                 else delete e.textRotate;
             }
-            else if (key === 'closed' || key === 'arrowOutside')
+            else if (key === 'closed' || key === 'arrowOutside' || key === 'flipped')
                 e[key] = !!value;
             else {
                 const n = finite(value);
@@ -719,14 +750,14 @@
             }
             this.doc.replace(e.id, e);
         } }); }
-        async run(id) {
+        async run(id, ...args) {
             $('file-menu').hidden = true;
             $('context-menu').hidden = true;
             $('command-suggestions').hidden = true;
             if (!this.doc)
                 return;
             if (['line', 'polyline', 'rectangle', 'circle', 'arc', 'ellipse', 'spline', 'point', 'dimension', 'dim-vertical', 'dim-horizontal', 'dim-angular', 'dim-radius', 'dim-diameter', 'centerline', 'centermark', 'measure', 'move', 'copy', 'rotate', 'scale', 'mirror', 'trim', 'extend', 'match'].includes(id)) {
-                this.startTool(id);
+                this.startTool(id, args[0] || {});
                 return;
             }
             if (['box', 'cylinder', 'sphere', 'cone', 'torus'].includes(id)) {
@@ -1028,6 +1059,41 @@
                 case 'cancel-tool':
                     this.cancel();
                     break;
+                case 'rotate-reference':
+                    this.startTool('rotate', { mode: 'point' });
+                    break;
+                case 'roughness':
+                case 'roughness-16':
+                case 'roughness-32':
+                case 'roughness-63':
+                case 'roughness-125':
+                    this.startTool('roughness', args[0]?.value ? args[0] : { value: ({ 'roughness-16': 'Ra 1.6', 'roughness-32': 'Ra 3.2', 'roughness-63': 'Ra 6.3', 'roughness-125': 'Ra 12.5' })[id] || 'Ra 3.2', style: 'plain', flipped: false });
+                    break;
+                case 'position':
+                    if (args[0]?.number !== undefined)
+                        this.startTool('position', args[0]);
+                    else
+                        this.positionDialog();
+                    break;
+                case 'dimension-tolerance':
+                    this.toleranceDialog();
+                    break;
+                case 'roughness-settings':
+                    this.roughnessDialog();
+                    break;
+                case 'position-settings':
+                    this.positionDialog(true);
+                    break;
+                case 'repeat-last': {
+                    const last = this.lastCommand;
+                    if (!last) {
+                        this.toast('No command to repeat yet.', true);
+                        break;
+                    }
+                    this.log('REPEAT', last.label + ' — ' + last.id.toUpperCase());
+                    await this.run(last.id, K.clone(last.params || {}));
+                    break;
+                }
                 case 'copy-clipboard':
                     this.copyClipboard();
                     break;
@@ -1213,6 +1279,11 @@
                 } if (!segments.length)
                 throw Error('The section plane does not cross the selected meshes.'); this.doc.transaction('Section meshes', () => { let layer = this.doc.layers.find(l => l.name === 'M-SECTION'); if (!layer)
                 layer = this.doc.addLayer('M-SECTION', '#db8a9e'); const ids = segments.map(points => this.doc.add('LINE', { points, layer: layer.id }).id); this.doc.selection = new Set(ids); }); this.log('Section', segments.length + ' section segments created.'); } }); }
+        recordCommand(id, params = {}, label = null) {
+            if (['repeat-last', 'finish-tool', 'close-tool', 'cancel-tool'].includes(id))
+                return;
+            this.lastCommand = { id, params: K.clone(params || {}), label: label || U.get(id).label };
+        }
         startTool(id, params = {}) {
             const selected = this.doc.selected(true);
             this.cancel(false);
@@ -1251,6 +1322,7 @@
                 this.log('WCS', 'Switched to Top view for drawing on the world XY plane.');
             }
             this.lastTool = id;
+            this.recordCommand(id, params, id === 'roughness' ? params.value : id === 'rotate' && params.mode === 'point' ? U.get('rotate-reference').label : null);
             this.measureResult = null;
             this.updateToolPrompt();
             this.refreshRibbon();
@@ -1284,7 +1356,9 @@
             case 'measure': return n ? 'Specify second measurement point' : 'Specify first measurement point';
             case 'move':
             case 'copy': return n ? 'Specify destination or @dx,dy,dz' : 'Specify base point';
-            case 'rotate': return n ? 'Specify rotation angle (degrees) or point' : 'Specify rotation center';
+            case 'rotate': if (t.params.mode === 'point') return ['Specify rotation center', 'Specify reference point', 'Specify target point or angle'][n] || 'Specify target point or angle'; return n ? 'Specify rotation angle (degrees) or point' : 'Specify rotation center';
+            case 'roughness': return 'Click a line, arc or circle to place ' + (t.params.value || 'Ra 3.2') + ' (F to flip)';
+            case 'position': return n ? 'Specify number position' : 'Specify leader anchor on the part';
             case 'scale': return n ? 'Specify scale factor or target point' : 'Specify scale base point';
             case 'mirror': return n ? 'Specify second mirror-axis point' : 'Specify first mirror-axis point';
             case 'offset': return t.source ? 'Click the side to place the offset' : 'Select an object to offset';
@@ -2271,8 +2345,36 @@
                     this.measureResult = { a, b: p, distance };
                 }
             }
-            else if (['move', 'copy', 'rotate', 'scale', 'mirror'].includes(id)) {
+            else if (id === 'roughness') {
+                const hit = screen ? this.hit(screen, e => this.doc.editable(e) && !['TEXT', 'MTEXT', 'POINT', 'ROUGHNESS', 'POSITION'].includes(e.type)) : null;
+                const frame = this.surfaceFrame(hit?.e, p);
+                this.create({ type: 'ROUGHNESS', position: p.slice(), normal: frame.normal, tangent: frame.tangent, text: t.params.value, style: t.params.style || 'plain', flipped: !!t.params.flipped, height: Math.max(1e-6, this.defaults.dimensionHeight * .8), surfaceId: hit?.e?.id }, 'Surface finish ' + (t.params.value || ''));
+                this.updateToolPrompt();
+                this.invalidate();
+                return;
+            }
+            else if (id === 'position') {
                 if (!n)
+                    t.points.push(p.slice());
+                else {
+                    this.create({ type: 'POSITION', points: [t.points[0].slice(), p.slice()], text: t.params.number || '1', form: t.params.form || 'circle', end: t.params.end || 'arrow', textHeight: this.defaults.dimensionHeight }, 'Position callout');
+                    if (this.lastCommand && ['position', 'position-settings'].includes(this.lastCommand.id))
+                        this.lastCommand.params.number = String(Number(t.params.number || 0) + 1);
+                    this.cancel(false);
+                }
+            }
+            else if (['move', 'copy', 'rotate', 'scale', 'mirror'].includes(id)) {
+                if (id === 'rotate' && t.params.mode === 'point' && n >= 2) {
+                    const mat = this.transformPreview(p);
+                    if (!mat)
+                        throw Error('The transformation is degenerate.');
+                    this.doc.transaction('Rotate', () => this.doc.transform(t.selectedIds, mat));
+                    this.log('ROTATE', t.selectedIds.length + ' object(s) rotated by reference point.');
+                    this.cancel(false);
+                }
+                else if (!n)
+                    t.points.push(p.slice());
+                else if (id === 'rotate' && t.params.mode === 'point')
                     t.points.push(p.slice());
                 else {
                     const mat = this.transformPreview(p);
@@ -2332,6 +2434,27 @@
             const c = src.center.slice();
             return [c, V.add(c, V.mul(V.norm(d), r))];
         }
+        surfaceFrame(e, p) {
+            if (e && ['CIRCLE', 'ARC', 'ELLIPSE'].includes(e.type)) {
+                const radial = V.sub(p, e.center);
+                if (V.len(radial) > EPS)
+                    return { normal: V.norm(radial), tangent: V.norm(V.cross([0, 0, 1], V.norm(radial))) };
+            }
+            if (e) {
+                let nearest = null;
+                for (const s of G.geometry(e).segments) {
+                    const h = segmentDistance(p, s[0], s[1]);
+                    if (!nearest || h.d < nearest.d)
+                        nearest = { ...h, s };
+                }
+                if (nearest && V.dist(...nearest.s) > EPS) {
+                    const tangent = V.norm(V.sub(nearest.s[1], nearest.s[0]));
+                    return { normal: V.norm(V.cross([0, 0, 1], tangent)), tangent };
+                }
+            }
+            const b = basis(e?.normal || [0, 0, 1]);
+            return { normal: b.n, tangent: b.x };
+        }
         offsetSide(e, p) { if (e.center)
             return V.dist(e.center, p) > V.len(G.conicAxes(e).x) ? 1 : -1; if (e.type === 'POLYLINE' && e.closed)
             return inside(p, G.path(e)) ? -1 : 1; let nearest = null; for (const s of G.geometry(e).segments) {
@@ -2342,8 +2465,15 @@
             return 1; const d = V.sub(nearest.s[1], nearest.s[0]), v = V.sub(p, nearest.s[0]); return d[0] * v[1] - d[1] * v[0] >= 0 ? 1 : -1; }
         transformPreview(p) { const t = this.tool; if (!t?.points.length)
             return null; const base = t.points[0]; if (t.id === 'move' || t.id === 'copy')
-            return M.translation(...V.sub(p, base)); if (t.id === 'rotate')
-            return M.around(base, M.rotation(Math.atan2(p[1] - base[1], p[0] - base[0]))); if (t.id === 'scale') {
+            return M.translation(...V.sub(p, base)); if (t.id === 'rotate') {
+            if (t.params.mode === 'point') {
+                if (t.points.length < 2)
+                    return null;
+                const ref = t.points[1], a0 = Math.atan2(ref[1] - base[1], ref[0] - base[0]), a1 = Math.atan2(p[1] - base[1], p[0] - base[0]);
+                return M.around(base, M.rotation(a1 - a0));
+            }
+            return M.around(base, M.rotation(Math.atan2(p[1] - base[1], p[0] - base[0])));
+        } if (t.id === 'scale') {
             const scale = V.dist(base, p) / (t.reference || 1);
             return scale > 1e-8 ? M.around(base, M.scale(scale)) : null;
         } if (t.id === 'mirror') {
@@ -3013,6 +3143,13 @@
                     const mat = M.translation(...V.sub(p, t.params.origin));
                     return t.params.entities.slice(0, 200).map(e => G.transform(e, mat));
                 }
+                if (t.id === 'roughness') {
+                    const src = this.hoverId ? this.doc.byId.get(this.hoverId) : null;
+                    const frame = this.surfaceFrame(src, p);
+                    return [{ type: 'ROUGHNESS', position: p.slice(), normal: frame.normal, tangent: frame.tangent, text: t.params.value, style: t.params.style || 'plain', flipped: !!t.params.flipped, height: Math.max(1e-6, this.defaults.dimensionHeight * .8) }];
+                }
+                if (t.id === 'position' && n)
+                    return [{ type: 'POSITION', points: [t.points[0], p], text: t.params.number || '1', form: t.params.form || 'circle', end: t.params.end || 'arrow', textHeight: this.defaults.dimensionHeight }];
                 if (['move', 'copy', 'rotate', 'scale', 'mirror'].includes(t.id) && n) {
                     const mat = this.transformPreview(p);
                     return mat ? t.selectedIds.slice(0, 300).map(id => this.doc.byId.get(id)).filter(Boolean).map(e => G.transform(e, mat)) : [];
@@ -3152,6 +3289,13 @@
                         return null;
                     return { fields: [{ key: 'offset', label: 'Offset', value: fmt(t.params.distance) }], hint: 'Offset · Enter applies' };
                 case 'rotate':
+                    if (t.params.mode === 'point') {
+                        if (n < 2)
+                            return xy();
+                        const c = t.points[0], r = t.points[1];
+                        const delta = angle(Math.atan2(w[1] - c[1], w[0] - c[0]) - Math.atan2(r[1] - c[1], r[0] - c[0])) * 180 / Math.PI;
+                        return { fields: [{ key: 'angle', label: 'Angle°', value: fmt(delta, 2) }], hint: 'Angle from reference · Enter applies' };
+                    }
                     if (!n)
                         return xy();
                     return { fields: [{ key: 'angle', label: 'Angle°', value: fmt(ang, 2) }], hint: 'Angle · Enter applies' };
@@ -3298,6 +3442,31 @@
             }
             for (const e of this.previewGeometry())
                 drawWire(e, theme === 'light' ? '#16869c' : '#8ce0e5', true);
+            const rt = this.tool;
+            if (rt?.id === 'rotate' && rt.params.mode === 'point' && rt.points.length && this.pointer.inside) {
+                const base = project(rt.points[0]);
+                c.strokeStyle = '#dfba78';
+                c.lineWidth = 1.2;
+                c.setLineDash([5, 4]);
+                c.beginPath();
+                if (rt.points.length > 1) {
+                    const ref = project(rt.points[1]);
+                    c.moveTo(base[0], base[1]);
+                    c.lineTo(ref[0], ref[1]);
+                }
+                c.moveTo(base[0], base[1]);
+                c.lineTo(this.pointer.x, this.pointer.y);
+                c.stroke();
+                c.setLineDash([]);
+                if (rt.points.length > 1) {
+                    const b = rt.points[0], ref = rt.points[1], w = this.pointer.world;
+                    const degrees = angle(Math.atan2(w[1] - b[1], w[0] - b[0]) - Math.atan2(ref[1] - b[1], ref[0] - b[0])) * 180 / Math.PI;
+                    c.font = '11px Consolas,monospace';
+                    c.fillStyle = '#dfba78';
+                    c.textAlign = 'left';
+                    c.fillText(degrees.toFixed(2) + '°', this.pointer.x + 14, this.pointer.y - 10);
+                }
+            }
             if (!this.tool && this.doc.selection.size <= 60) {
                 for (const e of this.doc.selected(true))
                     for (const grip of this.entityGrips(e)) {
@@ -3447,6 +3616,16 @@
                     await this.run('selectall');
                     continue;
                 }
+                if (this.tool?.id === 'rotate' && ['P', 'POINT', 'POINTS', 'REF', 'REFERENCE'].includes(upper)) {
+                    this.startTool('rotate', { mode: 'point' });
+                    continue;
+                }
+                if (this.tool?.id === 'roughness' && upper === 'F') {
+                    this.tool.params.flipped = !this.tool.params.flipped;
+                    this.log('ROUGHNESS', this.tool.params.flipped ? 'Symbol mirrored.' : 'Symbol restored.');
+                    this.invalidate();
+                    continue;
+                }
                 if ((token.includes(',') || token.includes('<')) && this.tool) {
                     this.acceptPoint(this.parsePoint(token));
                     continue;
@@ -3473,7 +3652,8 @@
             p.push(relative ? 0 : base[2] || 0); return relative ? V.add(base, p) : p; }
         acceptNumber(value) { const t = this.tool; if (!t?.points.length)
             throw Error('Specify a base point first with X,Y or a viewport click.'); const a = t.points.at(-1); if (t.id === 'rotate') {
-            this.doc.transaction('Rotate', () => this.doc.transform(t.selectedIds, M.around(a, M.rotation(value * Math.PI / 180))));
+            const center = t.params.mode === 'point' && t.points.length >= 2 ? t.points[0] : a;
+            this.doc.transaction('Rotate', () => this.doc.transform(t.selectedIds, M.around(center, M.rotation(value * Math.PI / 180))));
             this.cancel(false);
             return;
         } if (t.id === 'scale') {
@@ -3585,7 +3765,88 @@
         } }
         openPalette() { this.paletteIndex = 0; $('palette-search').value = ''; this.renderPalette(); $('command-palette').showModal(); $('palette-search').focus(); }
         renderPalette() { const q = $('palette-search').value.toLowerCase(); this.paletteMatches = U.commands.filter(c => [c.label, c.alias, c.description].join(' ').toLowerCase().includes(q)); this.paletteIndex = clamp(this.paletteIndex, 0, Math.max(0, this.paletteMatches.length - 1)); $('palette-results').innerHTML = this.paletteMatches.map((c, i) => `<button type="button" class="palette-item ${i === this.paletteIndex ? 'active' : ''}" data-palette="${c.id}">${U.icon(c.icon)}<div><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></div><kbd>${esc(c.alias.split(' · ').at(-1))}</kbd></button>`).join('') || '<div class="empty-explorer">No matching commands.</div>'; $('palette-results').querySelector('.active')?.scrollIntoView({ block: 'nearest' }); }
-        showContextMenu(x, y) { const ids = this.tool ? ['finish-tool', 'close-tool', 'cancel-tool'] : ['copy-clipboard', 'paste', 'move', 'erase', 'fit', 'palette']; const menu = $('context-menu'); menu.innerHTML = '<div class="popover-title">' + (this.tool ? esc(this.tool.id.toUpperCase()) : 'MODEL SPACE') + '</div>' + ids.map(id => `<button class="menu-item" data-action="${id}">${U.icon(({ 'finish-tool': 'check', 'cancel-tool': 'close', 'close-tool': 'polyline', 'copy-clipboard': 'copy', 'paste': 'insert' })[id] || U.get(id).icon)}${esc(({ 'finish-tool': 'Enter / finish', 'cancel-tool': 'Cancel command', 'close-tool': 'Close polyline', 'copy-clipboard': 'Copy to internal clipboard', 'paste': 'Paste objects' })[id] || U.get(id).label)}</button>`).join(''); menu.hidden = false; menu.style.left = clamp(x, 5, innerWidth - menu.offsetWidth - 5) + 'px'; menu.style.top = clamp(y, 5, innerHeight - menu.offsetHeight - 5) + 'px'; }
+        toleranceDialog() {
+            const selected = this.doc.selected(true);
+            if (selected.length !== 1 || selected[0].type !== 'DIMENSION') {
+                this.toast('Select one dimension to set its tolerance.', true);
+                return;
+            }
+            const e = selected[0];
+            this.dialog({ title: 'Dimension tolerance', html: `<p>Use a letter (uppercase hole, lowercase shaft), a tolerance grade, or both — for example <strong>H7</strong>, <strong>g6</strong>, <strong>a</strong>, <strong>7</strong>.</p><div class="form-grid">${this.field('tolerance', 'Tolerance', e.tolerance || '', 'text', 'maxlength="4" placeholder="H7"')}<div class="form-field"><label for="field-position">Display</label><select id="field-position" name="position"><option value="right" ${(e.tolerancePosition || 'right') === 'right' ? 'selected' : ''}>Right of dimension</option><option value="parentheses" ${e.tolerancePosition === 'parentheses' ? 'selected' : ''}>In parentheses</option></select></div></div>`, submit: 'Apply tolerance', onSubmit: f => {
+                const value = String(f.tolerance || '').trim();
+                if (value)
+                    K.Production.tolerance(value);
+                this.doc.transaction('Set dimension tolerance', () => {
+                    const out = K.clone(this.doc.byId.get(e.id));
+                    if (value)
+                        out.tolerance = value;
+                    else
+                        delete out.tolerance;
+                    out.tolerancePosition = f.position === 'parentheses' ? 'parentheses' : 'right';
+                    this.doc.replace(e.id, out);
+                });
+                this.selectionChanged();
+            } });
+        }
+        roughnessDialog() {
+            const selected = this.doc.selected(true);
+            if (selected.length !== 1 || selected[0].type !== 'ROUGHNESS') {
+                this.toast('Select one surface finish symbol to edit it.', true);
+                return;
+            }
+            const e = selected[0], values = K.Production.ROUGHNESS_VALUES;
+            this.dialog({ title: 'Surface finish', html: `<div class="form-grid"><div class="form-field"><label for="field-value">Value</label><select id="field-value" name="value">${values.map(v => `<option ${e.text === v ? 'selected' : ''}>${v}</option>`).join('')}<option value="custom" ${values.includes(e.text) ? '' : 'selected'}>Custom…</option></select></div>${this.field('custom', 'Custom value', values.includes(e.text) ? 'Ra 1.6' : e.text || '', 'text', 'maxlength="100"')}<div class="form-field"><label for="field-style">Symbol type</label><select id="field-style" name="style"><option value="plain" ${(e.style || 'plain') === 'plain' ? 'selected' : ''}>No treatment specified</option><option value="removal" ${e.style === 'removal' ? 'selected' : ''}>Material removal</option><option value="no-removal" ${e.style === 'no-removal' ? 'selected' : ''}>No material removal</option></select></div><label class="form-check form-field full"><input type="checkbox" name="flipped" ${e.flipped ? 'checked' : ''}>Mirror symbol to the other side</label>${this.field('height', 'Symbol height', e.height || 10, 'number', 'min="0.000001"')}</div>`, submit: 'Apply symbol', onSubmit: f => {
+                const value = f.value === 'custom' ? String(f.custom || '').trim() : f.value;
+                if (!value || value.length > 100)
+                    throw Error('Enter a surface finish value of up to 100 characters.');
+                this.doc.transaction('Edit surface finish', () => {
+                    const out = K.clone(this.doc.byId.get(e.id));
+                    Object.assign(out, { text: value, style: f.style, flipped: !!f.flipped, height: positive(f.height, 'Symbol height') });
+                    this.doc.replace(e.id, out);
+                });
+                this.selectionChanged();
+            } });
+        }
+        nextPositionNumber() { return String(this.doc.entities.filter(e => e.type === 'POSITION').length + 1); }
+        positionDialog(edit = false) {
+            const selected = this.doc.selected(true), existing = edit && selected.length === 1 && selected[0].type === 'POSITION' ? selected[0] : null;
+            const current = { form: existing?.form || this.lastPositionForm || 'circle', end: existing?.end || this.lastPositionEnd || 'arrow', number: existing?.text || (edit ? this.lastPositionNumber || this.nextPositionNumber() : this.lastPositionNumber || this.nextPositionNumber()) };
+            this.dialog({ title: existing ? 'Position callout settings' : 'New position callout', html: `<div class="form-grid"><div class="form-field"><label for="field-form">Number form</label><select id="field-form" name="form"><option value="circle" ${current.form === 'circle' ? 'selected' : ''}>Circle</option><option value="line" ${current.form === 'line' ? 'selected' : ''}>Shelf line</option></select></div><div class="form-field"><label for="field-end">Leader end</label><select id="field-end" name="end"><option value="arrow" ${current.end === 'arrow' ? 'selected' : ''}>Arrow</option><option value="dot" ${current.end === 'dot' ? 'selected' : ''}>Dot</option></select></div>${this.field('number', 'Number (supports fields)', current.number, 'text', 'maxlength="1000"')}</div>`, submit: existing ? 'Apply settings' : 'Place callout', onSubmit: f => {
+                const number = String(f.number || '').trim();
+                if (!number || number.length > 1000)
+                    throw Error('Enter a callout number of up to 1000 characters.');
+                this.lastPositionForm = f.form;
+                this.lastPositionEnd = f.end;
+                this.lastPositionNumber = number;
+                if (existing) {
+                    this.doc.transaction('Edit position callout', () => {
+                        const out = K.clone(this.doc.byId.get(existing.id));
+                        Object.assign(out, { form: f.form, end: f.end, text: number });
+                        this.doc.replace(existing.id, out);
+                    });
+                    this.selectionChanged();
+                }
+                else
+                    this.startTool('position', { form: f.form, end: f.end, number });
+            } });
+        }
+        showContextMenu(x, y) {
+            const idle = !this.tool;
+            const selected = this.doc?.selected(true) || [], one = selected.length === 1 ? selected[0] : null;
+            const objectItems = !one ? [] : one.type === 'DIMENSION' ? ['dimension-tolerance'] : one.type === 'ROUGHNESS' ? ['roughness-settings'] : one.type === 'POSITION' ? ['position-settings'] : [];
+            const ids = idle ? ['repeat-last', ...objectItems, 'copy-clipboard', 'paste', 'move', 'erase', 'fit', 'palette'] : ['finish-tool', 'close-tool', 'cancel-tool'];
+            const icons = { 'finish-tool': 'check', 'cancel-tool': 'close', 'close-tool': 'polyline', 'copy-clipboard': 'copy', 'paste': 'insert', 'repeat-last': 'copy', 'dimension-tolerance': 'tolerance', 'roughness-settings': 'roughness', 'position-settings': 'position' };
+            const labels = { 'finish-tool': 'Enter / finish', 'cancel-tool': 'Cancel command', 'close-tool': 'Close polyline', 'copy-clipboard': 'Copy to internal clipboard', 'paste': 'Paste objects', 'dimension-tolerance': 'Tolerance…', 'roughness-settings': 'Surface finish settings…', 'position-settings': 'Callout settings…' };
+            const menu = $('context-menu');
+            menu.innerHTML = '<div class="popover-title">' + (idle ? 'MODEL SPACE' : esc(this.tool.id.toUpperCase())) + '</div>' + ids.map(id => {
+                const repeat = id === 'repeat-last';
+                const label = repeat ? 'Repeat: ' + (this.lastCommand ? this.lastCommand.label : 'last command') : (labels[id] || U.get(id).label);
+                return `<button class="menu-item" data-action="${id}"${repeat && !this.lastCommand ? ' disabled' : ''}>${U.icon(icons[id] || U.get(id).icon)}${esc(label)}</button>`;
+            }).join('');
+            menu.hidden = false;
+            menu.style.left = clamp(x, 5, innerWidth - menu.offsetWidth - 5) + 'px';
+            menu.style.top = clamp(y, 5, innerHeight - menu.offsetHeight - 5) + 'px';
+        }
         copyClipboard(cut = false) { const selected = this.doc.selected(cut); if (!selected.length) {
             this.toast('Select objects to copy.', true);
             return;

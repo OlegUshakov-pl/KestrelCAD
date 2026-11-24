@@ -47,7 +47,7 @@ def main() -> None:
     try:
         # These are required, not silently optional. New conventionally named suites
         # join automatically, so adding a test cannot accidentally omit it from CI.
-        required = ('core.test.js', 'production.test.js', 'constraints.test.js',
+        required = ('core.test.js', 'production.test.js', 'manufacturing.test.js', 'manufacturing.browser.py', 'constraints.test.js',
                     'kernel-client.test.js', 'server.test.py', 'kernel.test.py',
                     'browser.test.py', 'production.browser.py', 'advanced.browser.py',
                     'constraints.browser.py', 'dxf_interop.py', 'production_interop.py')
