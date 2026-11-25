@@ -153,6 +153,10 @@ with sync_playwright() as p:
         eq('kestrel.doc.entities[0].text', '5')
         eq('kestrel.doc.entities[0].form', 'circle')
         eq('kestrel.doc.entities[0].end', 'dot')
+        inside = page.evaluate('''()=>{const e=kestrel.doc.entities[0],b=e.points[1],r=e.textHeight*.95;
+            return kestrel.doc.geometry(e).segments.filter(s=>Math.min(
+                Math.hypot(s[0][0]-b[0],s[0][1]-b[1]),Math.hypot(s[1][0]-b[0],s[1][1]-b[1]))<r*.5).length;}''')
+        assert inside == 0, inside
         page.evaluate('kestrel.doc.selection.clear();kestrel.selectionChanged()')
         right_click([200, 200, 0])
         assert menu().first.get_attribute('data-action') == 'repeat-last'

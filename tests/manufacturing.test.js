@@ -101,6 +101,14 @@ test('position callout works in all four form/end combinations', () => {
     }
 });
 
+test('circle callout leader stops at the circumference, not at the centre', () => {
+    const e = callout('circle', 'arrow', '5'), g = G.geometry(e), [a, b] = e.points, r = e.textHeight * .95;
+    assert.ok(g.segments.every(s => Math.min(V.dist(s[0], b), V.dist(s[1], b)) > r * .5));
+    const leader = g.segments.find(s => V.dist(s[0], a) < 1e-9 && Math.abs(V.dist(s[1], b) - r) < 1e-6);
+    assert.ok(leader);
+    assert.ok(Math.abs(V.dist(leader[1], b) - r) < 1e-6);
+});
+
 test('new entities survive .kcad round trip and atomic undo/redo', () => {
     const d = fresh();
     d.transaction('Add manufacturing objects', () => {

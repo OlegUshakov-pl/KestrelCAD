@@ -335,7 +335,7 @@
         const left = at(-h * .42, h * .9), right = at(h * .42, h * 1.85), shelf = at(h * 1.45, h * 1.85);
         out.segments.push([p, left], [p, right], [right, shelf]);
         if (e.style === 'removal')
-            out.segments.push([at(h * .42, h * 1.55), at(h * 1.45, h * 1.55)]);
+            out.segments.push([at(-h * .5, h), at(h * .25, h)]);
         if (e.style === 'no-removal') {
             const center = at(h * .1, h * 1.08), r = h * .36;
             for (let i = 0; i < 16; i++) {
@@ -351,8 +351,12 @@
     function positionGeometry(e) {
         const out = empty(), [a, b] = e.points, h = e.textHeight || 10, delta = V.sub(b, a);
         if (V.len(delta) < EPS) return out;
-        const u = V.norm(delta), side = V.norm(V.cross([0, 0, 1], u));
-        out.segments.push([a, b]);
+        const u = V.norm(delta), side = V.norm(V.cross([0, 0, 1], u)), radius = Math.max(h * .95, 1e-6);
+        // A circle callout's leader stops at the circumference; the number
+        // stays inside the circle with no line running through it.
+        const leaderEnd = e.form === 'circle' ? V.add(b, V.mul(u, -radius)) : b;
+        if (V.dist(a, b) > radius || e.form !== 'circle')
+            out.segments.push([a, leaderEnd]);
         if (e.end === 'arrow') {
             const w1 = V.add(a, V.add(V.mul(u, h * .85), V.mul(side, h * .22))), w2 = V.add(a, V.add(V.mul(u, h * .85), V.mul(side, -h * .22)));
             out.segments.push([a, w1], [a, w2]); out.triangles.push({ points: [a, w1, w2], normal: [0, 0, 1] });
@@ -365,10 +369,9 @@
             }
         }
         if (e.form === 'circle') {
-            const r = Math.max(h * .95, 1e-6);
             for (let i = 0; i < 24; i++) {
                 const a0 = i / 24 * TAU, a1 = (i + 1) / 24 * TAU;
-                out.segments.push([V.add(b, [Math.cos(a0) * r, Math.sin(a0) * r, 0]), V.add(b, [Math.cos(a1) * r, Math.sin(a1) * r, 0])]);
+                out.segments.push([V.add(b, [Math.cos(a0) * radius, Math.sin(a0) * radius, 0]), V.add(b, [Math.cos(a1) * radius, Math.sin(a1) * radius, 0])]);
             }
             out.texts.push({ position: b, text: e.text, height: h * .8, direction: [1, 0, 0], normal: [0, 0, 1], align: 'center' });
         }
