@@ -188,6 +188,21 @@ with sync_playwright() as p:
 
     test('rotate by reference matches the typed rotation angle', rotate_by_points)
 
+    def callout_grips():
+        fresh()
+        page.evaluate("""()=>{const d=kestrel.doc;d.transaction('Callout',()=>d.add({
+            type:'POSITION',points:[[0,0,0],[40,30,0]],text:'1',form:'circle',end:'arrow',textHeight:10}));}""")
+        select(0)
+        grips = page.evaluate('kestrel.entityGrips(kestrel.doc.entities[0]).map(g=>[g.kind,g.index])')
+        assert ['point', 0] in grips and ['point', 1] in grips, grips
+        assert ['translate', None] in grips or any(g[0] == 'translate' for g in grips), grips
+        page.evaluate("""()=>{const e=kestrel.doc.entities[0],g=kestrel.entityGrips(e).find(g=>g.kind==='point'&&g.index===1);
+            const moved=kestrel.moveGrip(e,g,[80,60,0]);kestrel.doc.transaction('Move callout grip',()=>kestrel.doc.replace(e.id,moved));}""")
+        eq('kestrel.doc.entities[0].points[1]', [80, 60, 0])
+        eq('kestrel.doc.entities[0].points[0]', [0, 0, 0])
+
+    test('position callout has movable grips at both ends', callout_grips)
+
     def clipboard():
         fresh()
         page.evaluate("""()=>{const d=kestrel.doc;d.transaction('Manufacturing fixture',()=>{

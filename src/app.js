@@ -3045,9 +3045,9 @@
             throw Error('This command edits LINE, POLYLINE, SPLINE, CIRCLE and ARC entities.');
         }        entityGrips(e) {
             const result = [];
-            if (e.points && ['LINE', 'POLYLINE', 'DIMENSION'].includes(e.type)) {
+            if (e.points && ['LINE', 'POLYLINE', 'DIMENSION', 'POSITION'].includes(e.type)) {
                 e.points.forEach((p, i) => result.push({ kind: 'point', index: i, point: p }));
-                if (e.type === 'LINE')
+                if (e.type === 'LINE' || e.type === 'POSITION')
                     result.push({ kind: 'translate', point: V.lerp(...e.points, .5) });
                 if (e.type === 'DIMENSION') {
                     const n = V.norm(V.cross([0, 0, 1], V.sub(e.points[1], e.points[0])));

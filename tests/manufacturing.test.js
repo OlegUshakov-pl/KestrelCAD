@@ -70,6 +70,16 @@ test('roughness symbol orients along the surface and mirrors on flip', () => {
     assert.ok(b.segments[0][1][1] < b.segments[0][0][1]);
 });
 
+test('roughness symbol is a GOST V with its tip at the surface point', () => {
+    const e = rough('Ra 1.6', 'plain');
+    const g = G.geometry(e);
+    assert.equal(g.segments.length, 2);
+    assert.deepEqual(g.segments[0][0], e.position);
+    assert.deepEqual(g.segments[1][0], e.position);
+    assert.ok(g.segments[0][1][0] < e.position[0]);
+    assert.ok(g.segments[1][1][0] > e.position[0]);
+});
+
 test('roughness symbol types add the required treatment marks', () => {
     const plain = G.geometry(rough('Ra 1.6', 'plain')).segments.length;
     assert.equal(plain, G.geometry(rough('Ra 1.6', 'removal')).segments.length - 1);

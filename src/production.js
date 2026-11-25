@@ -332,12 +332,12 @@
         side = V.norm(side);
         const dir = e.flipped ? V.mul(side, -1) : side, h = e.height || 10;
         const at = (x, y) => V.add(p, V.add(V.mul(t, x), V.mul(dir, y)));
-        const a = at(-h * .38, h * .9), b = at(h * .3, h * 1.55), c = at(h * 1.15, h * 1.55);
-        out.segments.push([p, a], [a, b], [b, c]);
+        const left = at(-h * .42, h * .9), right = at(h * .42, h * 1.85);
+        out.segments.push([p, left], [p, right]);
         if (e.style === 'removal')
-            out.segments.push([at(-h * .55, h * 1.25), at(h * .95, h * 1.25)]);
+            out.segments.push([at(-h * .62, h * 1.32), at(h * .62, h * 1.32)]);
         if (e.style === 'no-removal') {
-            const center = at(h * .26, h * 1.3), r = h * .42;
+            const center = at(h * .1, h * 1.08), r = h * .36;
             for (let i = 0; i < 16; i++) {
                 const a0 = i / 16 * TAU, a1 = (i + 1) / 16 * TAU;
                 out.segments.push([V.add(center, V.add(V.mul(t, Math.cos(a0) * r), V.mul(dir, Math.sin(a0) * r))), V.add(center, V.add(V.mul(t, Math.cos(a1) * r), V.mul(dir, Math.sin(a1) * r)))]);
@@ -364,7 +364,7 @@
             }
         }
         if (e.form === 'circle') {
-            const r = Math.max(h * .85, 1e-6);
+            const r = Math.max(h * .95, 1e-6);
             for (let i = 0; i < 24; i++) {
                 const a0 = i / 24 * TAU, a1 = (i + 1) / 24 * TAU;
                 out.segments.push([V.add(b, [Math.cos(a0) * r, Math.sin(a0) * r, 0]), V.add(b, [Math.cos(a1) * r, Math.sin(a1) * r, 0])]);
@@ -372,9 +372,13 @@
             out.texts.push({ position: b, text: e.text, height: h * .8, direction: [1, 0, 0], normal: [0, 0, 1], align: 'center' });
         }
         else {
-            const shelf = Math.abs(u[0]) > .25 ? V.norm([u[0], u[1], 0]) : [1, 0, 0];
-            out.segments.push([V.add(b, V.mul(shelf, -h)), V.add(b, V.mul(shelf, h))]);
-            out.texts.push({ position: V.add(b, [0, 0, h * .3]), text: e.text, height: h * .85, direction: [1, 0, 0], normal: [0, 0, 1], align: 'center' });
+            let shelf = V.sub([1, 0, 0], V.mul(u, V.dot(u, [1, 0, 0])));
+            if (V.len(shelf) < .2)
+                shelf = V.sub([0, 1, 0], V.mul(u, V.dot(u, [0, 1, 0])));
+            shelf = V.norm(shelf);
+            const above = V.norm(V.cross([0, 0, 1], shelf));
+            out.segments.push([b, V.add(b, V.mul(shelf, h * 2.4))]);
+            out.texts.push({ position: V.add(V.add(b, V.mul(shelf, h * .35)), V.mul(above, h * .35)), text: e.text, height: h * .85, direction: shelf, normal: [0, 0, 1], align: 'left' });
         }
         out.points = out.segments.flat(); out.snaps = [{ point: a, type: 'endpoint' }, { point: b, type: 'insertion' }];
         return out;
