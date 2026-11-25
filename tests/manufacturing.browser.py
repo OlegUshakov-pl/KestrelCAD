@@ -125,6 +125,8 @@ with sync_playwright() as p:
         click_world([50, 0, 0])
         eq('kestrel.doc.entities.filter(e=>e.type==="ROUGHNESS").length', 1)
         eq('kestrel.doc.entities[1].text', 'Ra 3.2')
+        eq('kestrel.doc.geometry(kestrel.doc.entities[1]).texts[0].normal', [0, 0, 1])
+        eq('kestrel.doc.geometry(kestrel.doc.entities[1]).texts[0].direction', [1, 0, 0])
         eq('kestrel.tool.id', 'roughness')
         click_world([80, 0, 0])
         eq('kestrel.doc.entities.filter(e=>e.type==="ROUGHNESS").length', 2)
@@ -200,6 +202,11 @@ with sync_playwright() as p:
             const moved=kestrel.moveGrip(e,g,[80,60,0]);kestrel.doc.transaction('Move callout grip',()=>kestrel.doc.replace(e.id,moved));}""")
         eq('kestrel.doc.entities[0].points[1]', [80, 60, 0])
         eq('kestrel.doc.entities[0].points[0]', [0, 0, 0])
+        page.evaluate("""()=>{const d=kestrel.doc;d.transaction('Vertical callout',()=>d.add({
+            type:'POSITION',points:[[0,0,0],[0,50,0]],text:'2',form:'line',end:'dot',textHeight:10}));}""")
+        eq('kestrel.doc.geometry(kestrel.doc.entities[1]).texts[0].direction', [1, 0, 0])
+        shelf = page.evaluate('kestrel.doc.geometry(kestrel.doc.entities[1]).segments.at(-1)')
+        assert abs(shelf[0][0] - shelf[1][0]) > 0 and abs(shelf[0][1] - shelf[1][1]) < 1e-9, shelf
 
     test('position callout has movable grips at both ends', callout_grips)
 

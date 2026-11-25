@@ -332,10 +332,10 @@
         side = V.norm(side);
         const dir = e.flipped ? V.mul(side, -1) : side, h = e.height || 10;
         const at = (x, y) => V.add(p, V.add(V.mul(t, x), V.mul(dir, y)));
-        const left = at(-h * .42, h * .9), right = at(h * .42, h * 1.85);
-        out.segments.push([p, left], [p, right]);
+        const left = at(-h * .42, h * .9), right = at(h * .42, h * 1.85), shelf = at(h * 1.45, h * 1.85);
+        out.segments.push([p, left], [p, right], [right, shelf]);
         if (e.style === 'removal')
-            out.segments.push([at(-h * .62, h * 1.32), at(h * .62, h * 1.32)]);
+            out.segments.push([at(h * .42, h * 1.55), at(h * 1.45, h * 1.55)]);
         if (e.style === 'no-removal') {
             const center = at(h * .1, h * 1.08), r = h * .36;
             for (let i = 0; i < 16; i++) {
@@ -343,7 +343,8 @@
                 out.segments.push([V.add(center, V.add(V.mul(t, Math.cos(a0) * r), V.mul(dir, Math.sin(a0) * r))), V.add(center, V.add(V.mul(t, Math.cos(a1) * r), V.mul(dir, Math.sin(a1) * r)))]);
             }
         }
-        out.texts.push({ position: at(h * .3, h * (e.style === 'plain' ? 2.3 : 2.7)), text: e.text, height: h * .72, direction: t, normal: n, align: 'center' });
+        // The value sits above the horizontal shelf in the view plane, never edge-on.
+        out.texts.push({ position: at(h * .55, h * 2.18), text: e.text, height: h * .78, direction: [1, 0, 0], normal: [0, 0, 1], align: 'left' });
         out.points = [p]; out.snaps = [{ point: p, type: 'insertion' }];
         return out;
     }
@@ -372,13 +373,11 @@
             out.texts.push({ position: b, text: e.text, height: h * .8, direction: [1, 0, 0], normal: [0, 0, 1], align: 'center' });
         }
         else {
-            let shelf = V.sub([1, 0, 0], V.mul(u, V.dot(u, [1, 0, 0])));
-            if (V.len(shelf) < .2)
-                shelf = V.sub([0, 1, 0], V.mul(u, V.dot(u, [0, 1, 0])));
-            shelf = V.norm(shelf);
-            const above = V.norm(V.cross([0, 0, 1], shelf));
-            out.segments.push([b, V.add(b, V.mul(shelf, h * 2.4))]);
-            out.texts.push({ position: V.add(V.add(b, V.mul(shelf, h * .35)), V.mul(above, h * .35)), text: e.text, height: h * .85, direction: shelf, normal: [0, 0, 1], align: 'left' });
+            // The shelf and its number stay horizontal in the drawing plane
+            // regardless of the leader direction or later geometry edits.
+            const shelf = [1, 0, 0];
+            out.segments.push([b, V.add(b, [h * 2.4, 0, 0])]);
+            out.texts.push({ position: V.add(b, [h * .3, h * .35, 0]), text: e.text, height: h * .85, direction: shelf, normal: [0, 0, 1], align: 'left' });
         }
         out.points = out.segments.flat(); out.snaps = [{ point: a, type: 'endpoint' }, { point: b, type: 'insertion' }];
         return out;
