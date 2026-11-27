@@ -86,7 +86,8 @@
     let dir, side, rotation;
     if (isVertical) { dir = [0, 1, 0]; side = [-1, 0, 0]; rotation = Math.PI / 2; }
     else { dir = u[0] < 0 ? V.mul(u, -1) : u; side = V.norm(V.cross(nn, dir)); rotation = Math.atan2(dir[1], dir[0]); }
-    return { segments, triangles, text: { position: e.textPosition || V.add(mid, V.mul(side, gap)), text: label, height: s, rotation, direction: dir, normal: nn, align: 'center' } }; }
+    const textObj = { position: e.textPosition || V.add(mid, V.mul(side, gap)), text: label, height: s, rotation, direction: dir, normal: nn, align: 'center' };
+    return { segments, triangles, text: K.Production?.withSmallTolerance ? K.Production.withSmallTolerance(e, textObj, len) : textObj }; }
     function featureEdges(vertices, used, all = false) {
         if (all)
             return [...used.values()].map(e => [vertices[e.a], vertices[e.b]]);

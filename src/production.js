@@ -23,6 +23,26 @@
         const base = e.tolerancePosition === 'parentheses' ? label + ' (' + e.tolerance + ')' : label + ' ' + e.tolerance;
         return base + deviationText(e, nominal);
     };
+    // The tolerance designation is drawn at 60% of the dimension text height.
+    // A native MTEXT composition keeps the two runs together in the viewport and
+    // in SVG export while the plain `text` string remains authoritative.
+    const TOLERANCE_RATIO = .6;
+    function withSmallTolerance(e, textObj, nominal) {
+        const tol = toleranceLabel(e, '', nominal);
+        if (!tol || !K.MText || !textObj.text.endsWith(tol)) return textObj;
+        try {
+            const bs = String.fromCharCode(92), rich = textObj.text.slice(0, -tol.length) + bs + 'H' + TOLERANCE_RATIO + 'x;' + tol, doc = owners.get(e), axes = G.textAxes(textObj);
+            const src = { type: 'MTEXT', text: rich, position: textObj.position, height: textObj.height, direction: textObj.direction, normal: textObj.normal, rotation: textObj.rotation, width: 0, attachment: 1 };
+            let c = K.MText.compose(src, doc);
+            // Attachment 1 is bottom-left; move the composition so the shared
+            // baseline stays on the dimension text position and centering holds.
+            const dx = textObj.align === 'center' ? -c.width / 2 : textObj.align === 'right' ? -c.width : 0;
+            src.position = V.add(textObj.position, V.add(V.mul(axes.x, dx), V.mul(axes.y, textObj.height)));
+            c = K.MText.compose(src, doc);
+            return { ...textObj, composition: c };
+        }
+        catch (error) { return textObj; }
+    }
     function tolerance(value) {
         if (value === undefined || value === null || value === '') return undefined;
         if (typeof value !== 'string' || !/^[a-zA-Z0-9]{1,4}$/.test(value)) throw Error('Invalid tolerance. Use 1–4 letters or digits (for example H7, g6, 7).');
@@ -260,7 +280,7 @@
         let nominal = V.dist(e.points[0], e.points[1]);
         // The base formatter also appends `tolerance`; strip it here so the
         // production formatter below is the single place that composes it.
-        if (!e.kind || e.kind === 'aligned') { const result = baseDimension({ ...v, tolerance: undefined, tolerancePosition: undefined }); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (nominal * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); result.text.text = toleranceLabel(e, result.text.text, nominal); return result; }
+        if (!e.kind || e.kind === 'aligned') { const result = baseDimension({ ...v, tolerance: undefined, tolerancePosition: undefined }); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (nominal * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); result.text.text = toleranceLabel(e, result.text.text, nominal); result.text = withSmallTolerance(e, result.text, nominal); return result; }
         const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [], outside = e.arrowOutside === true;
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
@@ -300,7 +320,8 @@
         if (isVertical) { rotation = Math.PI / 2; direction = [0, 1, 0]; }
         else { if (direction[0] < 0) direction = V.mul(direction, -1); rotation = Math.atan2(direction[1], direction[0]); }
         if (e.textRotate === 'horizontal') { rotation = 0; direction = [1, 0, 0]; }
-        return { segments, triangles, text: { position: e.textPosition || position, text: toleranceLabel(e, e.text || text, nominal), height: h, direction, normal: n, rotation, align: 'center' } };
+        const label = { position: e.textPosition || position, text: toleranceLabel(e, e.text || text, nominal), height: h, direction, normal: n, rotation, align: 'center' };
+        return { segments, triangles, text: withSmallTolerance(e, label, nominal) };
     }
     function hatchGeometry(e) {
         const loops = e.loops || [e.points], b = basis(e.normal || [0, 0, 1]), origin = loops[0][0];
@@ -491,6 +512,6 @@
         const layout = { name: label, width: 420, height: 297, viewports: [{ x: 10, y: 10, width: 400, height: 265, center: [0,0,0], scale, locked: true, border: true, frozenLayers: [] }] }; validateLayout(layout);
         doc.transaction('Create layout', () => ensure(doc).layouts.push(layout)); return layout;
     }
-    K.Production = { defaults, ensure, bind, validate, validateEntity, CUSTOM, ROUGHNESS_VALUES, ROUGHNESS_STYLES, TOLERANCE_MODES, tolerance, toleranceLabel, deviationText, roughnessGeometry, positionGeometry, MM, num, point, name, frame, toWorld, toLocal, expand, renderEntities, defineBlock, insertBlock, explode, attach, reference, associations, dimension, hatchGeometry, flattenGeometry, stretch, breakEntity, align, validateLayout, layoutSVG, addLayout, owners };
+    K.Production = { defaults, ensure, bind, validate, validateEntity, CUSTOM, ROUGHNESS_VALUES, ROUGHNESS_STYLES, TOLERANCE_MODES, tolerance, toleranceLabel, deviationText, withSmallTolerance, TOLERANCE_RATIO, roughnessGeometry, positionGeometry, MM, num, point, name, frame, toWorld, toLocal, expand, renderEntities, defineBlock, insertBlock, explode, attach, reference, associations, dimension, hatchGeometry, flattenGeometry, stretch, breakEntity, align, validateLayout, layoutSVG, addLayout, owners };
     G.geometry = geometry; G.transform = transform; G.dimension = dimension;
 })(typeof window !== 'undefined' ? window : globalThis);
