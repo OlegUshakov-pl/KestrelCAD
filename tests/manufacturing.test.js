@@ -81,6 +81,7 @@ test('roughness symbol is a GOST V with its tip at the surface point', () => {
     assert.deepEqual(g.texts[0].normal, [0, 0, 1]);
     assert.deepEqual(g.texts[0].direction, [1, 0, 0]);
     assert.ok(g.texts[0].position[1] > e.position[1]);
+    assert.ok(g.texts[0].position[1] < Math.max(...g.segments.flat().map(p => p[1])));
 });
 
 test('roughness symbol types add the required treatment marks', () => {

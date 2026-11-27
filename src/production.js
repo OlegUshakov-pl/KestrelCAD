@@ -347,11 +347,11 @@
                 out.segments.push([V.add(center, V.add(V.mul(t, Math.cos(a0) * r), V.mul(dir, Math.sin(a0) * r))), V.add(center, V.add(V.mul(t, Math.cos(a1) * r), V.mul(dir, Math.sin(a1) * r)))]);
             }
         }
-        // The value sits above the shelf and rotates with the symbol: it lies in
+        // The value sits under the shelf and rotates with the symbol: it lies in
         // the symbol plane (spanned by `t` and `dir`), aligned with `t`, never
         // edge-on, and follows the surface orientation just like the strokes.
-        const symbolNormal = V.norm(V.cross(t, dir));
-        out.texts.push({ position: at(h * .55, h * 2.18), text: e.text, height: h * .78, direction: t, normal: symbolNormal, align: 'left' });
+        const symbolNormal = V.norm(V.cross(t, dir)), valueHeight = h * .78;
+        out.texts.push({ position: at(h * .55, h * 1.85 - valueHeight * 1.15), text: e.text, height: valueHeight, direction: t, normal: symbolNormal, align: 'left' });
         out.points = [p]; out.snaps = [{ point: p, type: 'insertion' }];
         return out;
     }
