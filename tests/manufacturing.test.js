@@ -2,7 +2,7 @@
 /* Run: node tests/manufacturing.test.js — no npm dependencies.
    Manufacturing drafting: tolerances, surface finish, position callouts. */
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
-for (const f of ['math', 'geometry', 'model', 'csg', 'exchange', 'production', 'constraints', 'fields', 'text-search'])
+for (const f of ['math', 'geometry', 'model', 'csg', 'exchange', 'iso286', 'production', 'constraints', 'fields', 'text-search'])
     require('../src/' + f + '.js');
 const K = globalThis.Kestrel, G = K.Geo, X = K.Exchange, P = K.Production, { V } = K.Math, results = [];
 function test(name, fn) { try { fn(); results.push({ name, status: 'passed' }); console.log('PASS', name); }
@@ -60,6 +60,24 @@ test('all four standard roughness values are accepted', () => {
         K.validateProject(d.serialize());
         assert.equal(G.geometry(d.entities[0]).texts[0].text, value);
     }
+});
+
+test('ISO 286 fit calculator supplies limit deviations', () => {
+    assert.deepEqual(K.ISO286.limits(40, 'H7'), { tolerance: 0.025, lowerDeviation: 0, upperDeviation: 0.025 });
+    assert.deepEqual(K.ISO286.limits(40, 'h6'), { tolerance: 0.016, lowerDeviation: -0.016, upperDeviation: 0 });
+    assert.deepEqual(K.ISO286.limits(100, 'g6'), { tolerance: 0.022, lowerDeviation: -0.034, upperDeviation: -0.012 });
+    assert.equal(K.ISO286.limits(4000, 'H7'), undefined);
+    assert.equal(K.ISO286.limits(40, 'ZZ9'), undefined);
+});
+
+test('numeric tolerance and text affixes compose once on every dimension kind', () => {
+    const base = dimension(undefined, 'right', { prefix: '⌀', tolerance: 'H7', toleranceNumeric: true });
+    const expected = '⌀40 H7 (+0.025/0)';
+    assert.equal(G.geometry(base).texts[0].text, expected);
+    assert.equal(P.dimension({ ...base, kind: 'linear' }).text.text, expected);
+    assert.equal(P.dimension({ ...base, kind: 'aligned' }).text.text, expected);
+    const d = fresh(); d.add(base); d.reindex();
+    assert.throws(() => K.validateProject({ ...d.serialize(), entities: [{ ...base, toleranceNumeric: 'yes' }] }));
 });
 
 test('roughness symbol orients along the surface and mirrors on flip', () => {

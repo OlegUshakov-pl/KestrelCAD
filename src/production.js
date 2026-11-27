@@ -9,7 +9,20 @@
     const ROUGHNESS_VALUES = ['Ra 1.6', 'Ra 3.2', 'Ra 6.3', 'Ra 12.5'];
     const ROUGHNESS_STYLES = new Set(['plain', 'removal', 'no-removal']);
     const TOLERANCE_MODES = new Set(['right', 'parentheses']);
-    const toleranceLabel = (e, label) => !e.tolerance ? label : e.tolerancePosition === 'parentheses' ? label + ' (' + e.tolerance + ')' : label + ' ' + e.tolerance;
+    // ISO 286 limit deviations are derived from the nominal measurement, so they
+    // stay correct when the dimension geometry or drawing units change.
+    function deviationText(e, nominal) {
+        if (!e.toleranceNumeric || !e.tolerance || !K.ISO286 || !Number.isFinite(nominal)) return '';
+        const doc = owners.get(e), scale = MM[doc?.units] || 1, r = K.ISO286.limits(nominal * scale, e.tolerance);
+        if (!r) return '';
+        const fmt = v => v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(3);
+        return ' (' + fmt(r.upperDeviation) + '/' + fmt(r.lowerDeviation) + ')';
+    }
+    const toleranceLabel = (e, label, nominal) => {
+        if (!e.tolerance) return label;
+        const base = e.tolerancePosition === 'parentheses' ? label + ' (' + e.tolerance + ')' : label + ' ' + e.tolerance;
+        return base + deviationText(e, nominal);
+    };
     function tolerance(value) {
         if (value === undefined || value === null || value === '') return undefined;
         if (typeof value !== 'string' || !/^[a-zA-Z0-9]{1,4}$/.test(value)) throw Error('Invalid tolerance. Use 1–4 letters or digits (for example H7, g6, 7).');
@@ -129,6 +142,7 @@
         if (e.type === 'DIMENSION') for (const k of ['prefix', 'suffix']) if (e[k] !== undefined && (typeof e[k] !== 'string' || e[k].length > 255)) throw Error('Invalid dimension affix.');
         if (e.type === 'DIMENSION' && e.tolerance !== undefined) tolerance(e.tolerance);
         if (e.type === 'DIMENSION' && e.tolerancePosition !== undefined && !TOLERANCE_MODES.has(e.tolerancePosition)) throw Error('Invalid tolerance display mode.');
+        if (e.type === 'DIMENSION' && e.toleranceNumeric !== undefined && typeof e.toleranceNumeric !== 'boolean') throw Error('Invalid numeric tolerance flag.');
         if (e.type === 'DIMENSION' && e.textRotate !== undefined && e.textRotate !== 'standard' && e.textRotate !== 'horizontal') throw Error('Invalid dimension text rotation.');
         if (e.type === 'DIMENSION' && e.arrowOutside !== undefined && typeof e.arrowOutside !== 'boolean') throw Error('Invalid dimension arrow placement.');
         if (e.measureAxis) point(e.measureAxis);
@@ -243,25 +257,29 @@
     }
     function dimension(e) {
         const doc = owners.get(e), style = doc?.production?.dimstyles.find(s => s.name === e.dimstyle), v = { ...style, ...e };
-        if (!e.kind || e.kind === 'aligned') { const result = baseDimension(v); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (V.dist(e.points[0], e.points[1]) * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); result.text.text = toleranceLabel(e, result.text.text); return result; }
+        let nominal = V.dist(e.points[0], e.points[1]);
+        // The base formatter also appends `tolerance`; strip it here so the
+        // production formatter below is the single place that composes it.
+        if (!e.kind || e.kind === 'aligned') { const result = baseDimension({ ...v, tolerance: undefined, tolerancePosition: undefined }); if (style && !e.text) result.text.text = (e.prefix ?? style.prefix ?? '') + (nominal * style.scale).toFixed(style.precision) + (e.suffix ?? style.suffix ?? ''); result.text.text = toleranceLabel(e, result.text.text, nominal); return result; }
         const p = e.points, n = V.norm(e.normal || [0, 0, 1]), h = v.textHeight || 10, segments = [], triangles = [], outside = e.arrowOutside === true;
         let position, text, direction = basis(n).x;
         const format = value => (v.prefix || '') + (value * (v.scale || 1)).toFixed(v.precision ?? 2) + (v.suffix || '');
         const arrow = (a, toward, flip = 1, tail = 0) => { const u = V.norm(V.sub(toward, a)), side = V.cross(n, u), len = flip * h, w1 = V.add(a, V.add(V.mul(u, len), V.mul(side, h * .25))), w2 = V.add(a, V.add(V.mul(u, len), V.mul(side, -h * .25))); segments.push([a, w1], [a, w2]); if (tail) segments.push([V.add(a, V.mul(u, len)), V.add(a, V.mul(u, len + flip * tail))]); triangles.push({ points: [a, w1, w2], normal: e.normal || [0, 0, 1] }); };
         if (e.kind === 'linear') {
             const u = V.norm(e.measureAxis || [1, 0, 0]), isVert = Math.abs(u[0]) < .3, side = V.norm(V.cross(n, u)), a = V.add(p[0], V.mul(side, e.offset || 0)), b = V.add(a, V.mul(u, V.dot(V.sub(p[1], p[0]), u)));
-            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b, outside ? -1 : 1, outside ? h * .5 : 0); arrow(b, a, outside ? -1 : 1, outside ? h * .5 : 0); text = format(Math.abs(V.dot(V.sub(p[1], p[0]), u)));
+            segments.push([p[0], a], [p[1], b], [a, b]); arrow(a, b, outside ? -1 : 1, outside ? h * .5 : 0); arrow(b, a, outside ? -1 : 1, outside ? h * .5 : 0); nominal = Math.abs(V.dot(V.sub(p[1], p[0]), u)); text = format(nominal);
             const rd = isVert ? [0, 1, 0] : (u[0] < 0 ? V.mul(u, -1) : u);
             direction = rd;
             const rside = isVert ? [-1, 0, 0] : V.norm(V.cross(n, rd));
-            const label = toleranceLabel(e, e.text || text); position = V.add(V.lerp(a, b, .5), V.mul(rside, isVert ? h * (.24 + .12 * label.length) : h * .24));
+            const label = toleranceLabel(e, e.text || text, nominal); position = V.add(V.lerp(a, b, .5), V.mul(rside, isVert ? h * (.24 + .12 * label.length) : h * .24));
         } else if (e.kind === 'radius' || e.kind === 'diameter') {
             const c = p[0], q = p[1], other = e.kind === 'diameter' ? V.sub(V.mul(c, 2), q) : c;
             segments.push([other, q]); arrow(q, other, outside ? -1 : 1, outside ? h * .5 : 0); if (e.kind === 'diameter') arrow(other, q, outside ? -1 : 1, outside ? h * .5 : 0);
             direction = V.norm(V.sub(q, c));
             if (Math.abs(direction[0]) >= .3 && direction[0] < 0) direction = V.mul(direction, -1);
             if (Math.abs(direction[0]) < .3) direction = [0, 1, 0];
-            position = V.add(q, V.mul(direction, h * 1.4)); text = (e.kind === 'radius' ? 'R' : '⌀') + format(V.dist(c, q) * (e.kind === 'diameter' ? 2 : 1));
+            nominal = V.dist(c, q) * (e.kind === 'diameter' ? 2 : 1);
+            position = V.add(q, V.mul(direction, h * 1.4)); text = (e.kind === 'radius' ? 'R' : '⌀') + format(nominal);
         } else if (e.kind === 'angular') {
             if (p.length !== 3) throw Error('Angular dimensions require a vertex and two ray points.');
             const u = V.norm(V.sub(p[1], p[0])), w = V.norm(V.sub(p[2], p[0])), side = V.cross(n, u), a = angle(Math.atan2(V.dot(w, side), V.dot(w, u))), radius = Math.abs(e.offset || Math.min(V.dist(p[0], p[1]), V.dist(p[0], p[2])) * .6);
@@ -271,17 +289,18 @@
             segments.push([p[0], curve(0)], [p[0], curve(a)]);
             if (outside) { arrow(curve(0), curve(start)); arrow(curve(a), curve(end)); }
             else { arrow(curve(0), curve(.1)); arrow(curve(a), curve(a - .1)); }
+            nominal = undefined; // ISO 286 limits apply to linear sizes, not angles.
             position = V.add(curve(a / 2), V.mul(V.norm(V.sub(curve(a / 2), p[0])), h)); text = (a * 180 / Math.PI).toFixed(v.precision ?? 2) + '°';
         } else {
             const a = p[0], b = p[1], axis = e.kind === 'ordinate-y' ? 1 : 0, end = V.add(b, e.kind === 'ordinate-y' ? [e.offset || h * 5, 0, 0] : [0, e.offset || h * 5, 0]);
-            segments.push([b, end]); position = end; text = format(b[axis] - a[axis]);
+            nominal = Math.abs(b[axis] - a[axis]); segments.push([b, end]); position = end; text = format(nominal);
         }
         const isVertical = Math.abs(direction[0]) < .3;
         let rotation;
         if (isVertical) { rotation = Math.PI / 2; direction = [0, 1, 0]; }
         else { if (direction[0] < 0) direction = V.mul(direction, -1); rotation = Math.atan2(direction[1], direction[0]); }
         if (e.textRotate === 'horizontal') { rotation = 0; direction = [1, 0, 0]; }
-        return { segments, triangles, text: { position: e.textPosition || position, text: toleranceLabel(e, e.text || text), height: h, direction, normal: n, rotation, align: 'center' } };
+        return { segments, triangles, text: { position: e.textPosition || position, text: toleranceLabel(e, e.text || text, nominal), height: h, direction, normal: n, rotation, align: 'center' } };
     }
     function hatchGeometry(e) {
         const loops = e.loops || [e.points], b = basis(e.normal || [0, 0, 1]), origin = loops[0][0];
@@ -472,6 +491,6 @@
         const layout = { name: label, width: 420, height: 297, viewports: [{ x: 10, y: 10, width: 400, height: 265, center: [0,0,0], scale, locked: true, border: true, frozenLayers: [] }] }; validateLayout(layout);
         doc.transaction('Create layout', () => ensure(doc).layouts.push(layout)); return layout;
     }
-    K.Production = { defaults, ensure, bind, validate, validateEntity, CUSTOM, ROUGHNESS_VALUES, ROUGHNESS_STYLES, TOLERANCE_MODES, tolerance, toleranceLabel, roughnessGeometry, positionGeometry, MM, num, point, name, frame, toWorld, toLocal, expand, renderEntities, defineBlock, insertBlock, explode, attach, reference, associations, dimension, hatchGeometry, flattenGeometry, stretch, breakEntity, align, validateLayout, layoutSVG, addLayout, owners };
+    K.Production = { defaults, ensure, bind, validate, validateEntity, CUSTOM, ROUGHNESS_VALUES, ROUGHNESS_STYLES, TOLERANCE_MODES, tolerance, toleranceLabel, deviationText, roughnessGeometry, positionGeometry, MM, num, point, name, frame, toWorld, toLocal, expand, renderEntities, defineBlock, insertBlock, explode, attach, reference, associations, dimension, hatchGeometry, flattenGeometry, stretch, breakEntity, align, validateLayout, layoutSVG, addLayout, owners };
     G.geometry = geometry; G.transform = transform; G.dimension = dimension;
 })(typeof window !== 'undefined' ? window : globalThis);

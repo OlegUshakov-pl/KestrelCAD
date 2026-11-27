@@ -639,6 +639,7 @@
                     html += row('Arrows outside', `<input data-prop="arrowOutside" aria-label="Arrows outside" type="checkbox" ${one.arrowOutside ? 'checked' : ''}>`);
                     html += input('Tolerance', 'tolerance', one.tolerance || '', 'text', 'maxlength="4" placeholder="H7"');
                     html += row('Tolerance position', `<select data-prop="tolerancePosition" aria-label="Tolerance position">${[['right', 'Right of dimension'], ['parentheses', 'In parentheses']].map(([v, l]) => `<option value="${v}" ${(one.tolerancePosition || 'right') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`);
+                    html += row('Numeric deviations', `<input data-prop="toleranceNumeric" aria-label="Numeric deviations" type="checkbox" ${one.toleranceNumeric ? 'checked' : ''}>`);
                 }
                 else if (one.type === 'ROUGHNESS') {
                     pos('Position', 'position', one.position);
@@ -754,7 +755,7 @@
                 if (value === 'horizontal') e.textRotate = 'horizontal';
                 else delete e.textRotate;
             }
-            else if (key === 'closed' || key === 'arrowOutside' || key === 'flipped')
+            else if (key === 'closed' || key === 'arrowOutside' || key === 'flipped' || key === 'toleranceNumeric')
                 e[key] = !!value;
             else {
                 const n = finite(value);
@@ -3822,18 +3823,30 @@
                 this.toast('Select one dimension to set its tolerance.', true);
                 return;
             }
-            const e = selected[0];
-            this.dialog({ title: 'Dimension tolerance', html: `<p>Use a letter (uppercase hole, lowercase shaft), a tolerance grade, or both — for example <strong>H7</strong>, <strong>g6</strong>, <strong>a</strong>, <strong>7</strong>.</p><div class="form-grid">${this.field('tolerance', 'Tolerance', e.tolerance || '', 'text', 'maxlength="4" placeholder="H7"')}<div class="form-field"><label for="field-position">Display</label><select id="field-position" name="position"><option value="right" ${(e.tolerancePosition || 'right') === 'right' ? 'selected' : ''}>Right of dimension</option><option value="parentheses" ${e.tolerancePosition === 'parentheses' ? 'selected' : ''}>In parentheses</option></select></div></div>`, submit: 'Apply tolerance', onSubmit: f => {
+            const e = selected[0], symbol = (target, char, title) => `<button type="button" class="button secondary" data-symbol="${char}" data-target="${target}" title="${esc(title)}">${char}</button>`, clear = target => `<button type="button" class="button secondary" data-symbol="" data-target="${target}">Clear</button>`;
+            this.dialog({ title: 'Dimension text and tolerance', html: `<p>Text before/after is placed around the measured value. Use the quick buttons for <strong>⌀ Ø R □</strong> before and <strong>± °</strong> after. A tolerance class such as <strong>H7</strong> or <strong>g6</strong> can also show its ISO 286 limit deviations as numbers.</p><div class="form-grid">${this.field('prefix', 'Text before', e.prefix || '', 'text', 'maxlength="255" placeholder="⌀"')}${this.field('suffix', 'Text after', e.suffix || '', 'text', 'maxlength="255" placeholder="±0.05"')}</div><div class="form-grid" style="margin-top:8px"><div class="form-field"><label>Symbols before</label><div style="display:flex;gap:6px;flex-wrap:wrap">${symbol('prefix', '⌀', 'Diameter')}${symbol('prefix', 'Ø', 'Diameter (alternative)')}${symbol('prefix', 'R', 'Radius')}${symbol('prefix', '□', 'Square')}${clear('prefix')}</div></div><div class="form-field"><label>Symbols after</label><div style="display:flex;gap:6px;flex-wrap:wrap">${symbol('suffix', '±', 'Plus/minus')}${symbol('suffix', '°', 'Degrees')}${clear('suffix')}</div></div></div><div class="form-grid" style="margin-top:8px">${this.field('tolerance', 'ISO 286 class', e.tolerance || '', 'text', 'maxlength="4" placeholder="H7"')}<div class="form-field"><label for="field-position">Display</label><select id="field-position" name="position"><option value="right" ${(e.tolerancePosition || 'right') === 'right' ? 'selected' : ''}>Right of dimension</option><option value="parentheses" ${e.tolerancePosition === 'parentheses' ? 'selected' : ''}>In parentheses</option></select></div></div><label class="form-check" style="margin-top:10px"><input type="checkbox" name="numeric" ${e.toleranceNumeric ? 'checked' : ''}>Show numeric limit deviations (for example +0.025/0)</label>`, submit: 'Apply tolerance', onOpen: () => {
+                $('modal-body').querySelectorAll('[data-symbol]').forEach(button => {
+                    button.onclick = () => {
+                        const input = $('field-' + button.dataset.target);
+                        if (!input) return;
+                        input.value = button.dataset.symbol ? input.value + button.dataset.symbol : '';
+                        input.focus();
+                    };
+                });
+            }, onSubmit: f => {
                 const value = String(f.tolerance || '').trim();
                 if (value)
                     K.Production.tolerance(value);
                 this.doc.transaction('Set dimension tolerance', () => {
                     const out = K.clone(this.doc.byId.get(e.id));
+                    out.prefix = String(f.prefix || '').trim();
+                    out.suffix = String(f.suffix || '').trim();
                     if (value)
                         out.tolerance = value;
                     else
                         delete out.tolerance;
                     out.tolerancePosition = f.position === 'parentheses' ? 'parentheses' : 'right';
+                    out.toleranceNumeric = f.numeric === 'on';
                     this.doc.replace(e.id, out);
                 });
                 this.selectionChanged();
