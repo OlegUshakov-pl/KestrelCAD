@@ -336,12 +336,14 @@
         side = V.norm(side);
         const dir = e.flipped ? V.mul(side, -1) : side, h = e.height || 10;
         const at = (x, y) => V.add(p, V.add(V.mul(t, x), V.mul(dir, y)));
-        const left = at(-h * .42, h * .9), right = at(h * .42, h * 1.85), shelf = at(h * 1.45, h * 1.85);
+        // GOST-style V: both arms are inclined about 30 degrees from vertical,
+        // the right arm is extended and carries the long shelf over the value.
+        const left = at(-h * .56, h * .95), right = at(h * 1.08, h * 1.85), shelf = at(h * 3.38, h * 1.85);
         out.segments.push([p, left], [p, right], [right, shelf]);
         if (e.style === 'removal')
-            out.segments.push([at(-h * .5, h), at(h * .25, h)]);
+            out.segments.push([at(-h * .56, h * .95), at(h * .55, h * .95)]);
         if (e.style === 'no-removal') {
-            const center = at(h * .1, h * 1.08), r = h * .36;
+            const center = at(0, h * .62), r = h * .31;
             for (let i = 0; i < 16; i++) {
                 const a0 = i / 16 * TAU, a1 = (i + 1) / 16 * TAU;
                 out.segments.push([V.add(center, V.add(V.mul(t, Math.cos(a0) * r), V.mul(dir, Math.sin(a0) * r))), V.add(center, V.add(V.mul(t, Math.cos(a1) * r), V.mul(dir, Math.sin(a1) * r)))]);
@@ -350,8 +352,8 @@
         // The value sits under the shelf and rotates with the symbol: it lies in
         // the symbol plane (spanned by `t` and `dir`), aligned with `t`, never
         // edge-on, and follows the surface orientation just like the strokes.
-        const symbolNormal = V.norm(V.cross(t, dir)), valueHeight = h * .78;
-        out.texts.push({ position: at(h * .55, h * 1.85 - valueHeight * 1.15), text: e.text, height: valueHeight, direction: t, normal: symbolNormal, align: 'left' });
+        const symbolNormal = V.norm(V.cross(t, dir)), valueHeight = h * .58;
+        out.texts.push({ position: at(h * 1.43, h * 1.85 - valueHeight * 1.12), text: e.text, height: valueHeight, direction: t, normal: symbolNormal, align: 'left' });
         out.points = [p]; out.snaps = [{ point: p, type: 'insertion' }];
         return out;
     }
