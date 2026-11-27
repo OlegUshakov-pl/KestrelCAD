@@ -4,6 +4,25 @@
     const K = root.Kestrel, { V, M, EPS, TAU, angle, sweep, lineIntersection, segmentDistance, inside, polygonArea, faceNormal } = K.Math, G = K.Geo, U = K.UI, $ = id => document.getElementById(id), esc = U.escape;
     const UNIT_LABELS = { mm: 'Millimeters', cm: 'Centimeters', m: 'Meters', in: 'Inches', ft: 'Feet', unitless: 'Unitless' }, UNIT_MM = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8, unitless: 1 };
     const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+    /* Closest point on a 3D segment; keeps all coordinates (unlike K.Math.segmentDistance, which is planar). */
+    function closestOnSegment3D(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], dz = (b[2] || 0) - (a[2] || 0), l = dx * dx + dy * dy + dz * dz; let t = l ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy + ((p[2] || 0) - (a[2] || 0)) * dz) / l : 0; t = clamp(t, 0, 1); return [a[0] + t * dx, a[1] + t * dy, (a[2] || 0) + t * dz]; }
+    /* Closest point on a triangle (Real-Time Collision Detection, Christer Ericson). */
+    function closestOnTriangle(p, a, b, c) {
+        const ab = V.sub(b, a), ac = V.sub(c, a), ap = V.sub(p, a), d1 = V.dot(ab, ap), d2 = V.dot(ac, ap);
+        if (d1 <= 0 && d2 <= 0) return a.slice();
+        const bp = V.sub(p, b), d3 = V.dot(ab, bp), d4 = V.dot(ac, bp);
+        if (d3 >= 0 && d4 <= d3) return b.slice();
+        const vc = d1 * d4 - d3 * d2;
+        if (vc <= 0 && d1 >= 0 && d3 <= 0) return V.add(a, V.mul(ab, d1 / (d1 - d3)));
+        const cp = V.sub(p, c), d5 = V.dot(ab, cp), d6 = V.dot(ac, cp);
+        if (d6 >= 0 && d5 <= d6) return c.slice();
+        const vb = d5 * d2 - d1 * d6;
+        if (vb <= 0 && d2 >= 0 && d6 <= 0) return V.add(a, V.mul(ac, d2 / (d2 - d6)));
+        const va = d3 * d6 - d5 * d4;
+        if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return V.add(b, V.mul(V.sub(c, b), (d4 - d3) / (d4 - d3 + d5 - d6)));
+        const denom = 1 / (va + vb + vc);
+        return V.add(a, V.add(V.mul(ab, vb * denom), V.mul(ac, vc * denom)));
+    }
     function finite(value, name = 'Value', min = -1e12, max = 1e12) { const n = Number(value); if (!Number.isFinite(n) || n < min || n > max)
         throw Error(`${name} must be between ${min} and ${max}.`); return n; }
     function positive(value, name = 'Value') { return finite(value, name, 1e-7, 1e9); }
@@ -2348,7 +2367,7 @@
             else if (id === 'roughness') {
                 const hit = screen ? this.hit(screen, e => this.doc.editable(e) && !['TEXT', 'MTEXT', 'POINT', 'ROUGHNESS', 'POSITION'].includes(e.type)) : null;
                 const frame = this.surfaceFrame(hit?.e, p);
-                this.create({ type: 'ROUGHNESS', position: p.slice(), normal: frame.normal, tangent: frame.tangent, text: t.params.value, style: t.params.style || 'plain', flipped: !!t.params.flipped, height: Math.max(1e-6, this.defaults.dimensionHeight * .8), surfaceId: hit?.e?.id }, 'Surface finish ' + (t.params.value || ''));
+                this.create({ type: 'ROUGHNESS', position: frame.origin.slice(), normal: frame.normal, tangent: frame.tangent, text: t.params.value, style: t.params.style || 'plain', flipped: !!t.params.flipped, height: Math.max(1e-6, this.defaults.dimensionHeight * .8), surfaceId: hit?.e?.id }, 'Surface finish ' + (t.params.value || ''));
                 this.updateToolPrompt();
                 this.invalidate();
                 return;
@@ -2434,26 +2453,58 @@
             const c = src.center.slice();
             return [c, V.add(c, V.mul(V.norm(d), r))];
         }
+        /* Surface frame for placing surface-attached marks (e.g. roughness):
+           `origin` is the picked point projected (snapped) onto the nearest
+           surface point; `normal` is the surface normal (so marks stand
+           perpendicular to the surface); `tangent` is an orthonormal in-plane
+           direction so the symbol can be rotated with the surface. */
         surfaceFrame(e, p) {
+            const picked = p.slice();
+            // Analytic conics: snap onto the curve.
             if (e && ['CIRCLE', 'ARC', 'ELLIPSE'].includes(e.type)) {
                 const radial = V.sub(p, e.center);
-                if (V.len(radial) > EPS)
-                    return { normal: V.norm(radial), tangent: V.norm(V.cross([0, 0, 1], V.norm(radial))) };
+                if (V.len(radial) > EPS) {
+                    const axes = G.conicAxes(e);
+                    const ux = V.norm(axes.x), uy = V.norm(axes.y);
+                    const rx = V.len(axes.x) || 1, ry = V.len(axes.y) || rx;
+                    let ang = Math.atan2(V.dot(radial, uy) / ry, V.dot(radial, ux) / rx);
+                    if (e.type === 'ARC') { const start = e.startAngle || 0, total = sweep(start, e.endAngle), rel = ((ang - start) % TAU + TAU) % TAU; if (rel > total) ang = rel - total <= TAU - rel ? start + total : start; }
+                    const n = V.norm(radial);
+                    return { origin: G.conicPoint(e, ang), normal: n, tangent: V.norm(V.cross([0, 0, 1], n)) };
+                }
             }
             if (e) {
-                let nearest = null;
-                for (const s of G.geometry(e).segments) {
-                    const h = segmentDistance(p, s[0], s[1]);
-                    if (!nearest || h.d < nearest.d)
-                        nearest = { ...h, s };
+                const g = G.geometry(e);
+                // Closest point on edges (3D).
+                let best = null;
+                for (const s of g.segments || []) {
+                    if (V.dist(s[0], s[1]) <= EPS) continue;
+                    const point = closestOnSegment3D(p, s[0], s[1]), d = V.dist(p, point);
+                    if (!best || d < best.d) best = { d, point, s };
                 }
-                if (nearest && V.dist(...nearest.s) > EPS) {
-                    const tangent = V.norm(V.sub(nearest.s[1], nearest.s[0]));
-                    return { normal: V.norm(V.cross([0, 0, 1], tangent)), tangent };
+                // Closest point on surface faces (meshes / B-rep triangles), with face normal.
+                let bestTri = null;
+                for (const tri of g.triangles || []) {
+                    const pts = tri.points;
+                    if (!pts || pts.length < 3) continue;
+                    const point = closestOnTriangle(p, pts[0], pts[1], pts[2]), d = V.dist(p, point);
+                    const normal = V.norm(tri.normal || faceNormal(pts));
+                    if (!bestTri || d < bestTri.d) bestTri = { d, point, normal, pts };
+                }
+                if (bestTri && (!best || bestTri.d <= best.d + EPS)) {
+                    const normal = bestTri.normal;
+                    let tangent = V.norm(V.sub(bestTri.pts[1], bestTri.pts[0]));
+                    tangent = V.norm(V.sub(tangent, V.mul(normal, V.dot(tangent, normal))));
+                    if (V.len(tangent) < EPS) tangent = basis(normal).x;
+                    return { origin: bestTri.point, normal, tangent };
+                }
+                if (best) {
+                    const tangent = V.norm(V.sub(best.s[1], best.s[0]));
+                    return { origin: best.point, normal: V.norm(V.cross([0, 0, 1], tangent)), tangent };
                 }
             }
             const b = basis(e?.normal || [0, 0, 1]);
-            return { normal: b.n, tangent: b.x };
+            return { origin: picked, normal: b.n, tangent: b.x };
         }
         offsetSide(e, p) { if (e.center)
             return V.dist(e.center, p) > V.len(G.conicAxes(e).x) ? 1 : -1; if (e.type === 'POLYLINE' && e.closed)
@@ -3146,7 +3197,7 @@
                 if (t.id === 'roughness') {
                     const src = this.hoverId ? this.doc.byId.get(this.hoverId) : null;
                     const frame = this.surfaceFrame(src, p);
-                    return [{ type: 'ROUGHNESS', position: p.slice(), normal: frame.normal, tangent: frame.tangent, text: t.params.value, style: t.params.style || 'plain', flipped: !!t.params.flipped, height: Math.max(1e-6, this.defaults.dimensionHeight * .8) }];
+                    return [{ type: 'ROUGHNESS', position: frame.origin.slice(), normal: frame.normal, tangent: frame.tangent, text: t.params.value, style: t.params.style || 'plain', flipped: !!t.params.flipped, height: Math.max(1e-6, this.defaults.dimensionHeight * .8) }];
                 }
                 if (t.id === 'position' && n)
                     return [{ type: 'POSITION', points: [t.points[0], p], text: t.params.number || '1', form: t.params.form || 'circle', end: t.params.end || 'arrow', textHeight: this.defaults.dimensionHeight }];

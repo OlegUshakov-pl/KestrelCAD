@@ -326,6 +326,10 @@
         const out = empty(), p = e.position, n = V.norm(e.normal || [0, 0, 1]);
         let t = e.tangent ? V.norm(e.tangent) : basis(n).x;
         if (V.len(t) < EPS || Math.abs(V.dot(t, n)) > .99) t = basis(n).x;
+        // Orthonormalize the in-plane direction against the surface normal so the
+        // symbol lies in a plane perpendicular to the surface and rotates with it.
+        t = V.norm(V.sub(t, V.mul(n, V.dot(t, n))));
+        if (V.len(t) < EPS) t = basis(n).x;
         let side = V.sub(n, V.mul(t, V.dot(n, t)));
         if (V.len(side) < EPS)
             side = V.cross(n, t);
@@ -343,8 +347,11 @@
                 out.segments.push([V.add(center, V.add(V.mul(t, Math.cos(a0) * r), V.mul(dir, Math.sin(a0) * r))), V.add(center, V.add(V.mul(t, Math.cos(a1) * r), V.mul(dir, Math.sin(a1) * r)))]);
             }
         }
-        // The value sits above the horizontal shelf in the view plane, never edge-on.
-        out.texts.push({ position: at(h * .55, h * 2.18), text: e.text, height: h * .78, direction: [1, 0, 0], normal: [0, 0, 1], align: 'left' });
+        // The value sits above the shelf and rotates with the symbol: it lies in
+        // the symbol plane (spanned by `t` and `dir`), aligned with `t`, never
+        // edge-on, and follows the surface orientation just like the strokes.
+        const symbolNormal = V.norm(V.cross(t, dir));
+        out.texts.push({ position: at(h * .55, h * 2.18), text: e.text, height: h * .78, direction: t, normal: symbolNormal, align: 'left' });
         out.points = [p]; out.snaps = [{ point: p, type: 'insertion' }];
         return out;
     }
