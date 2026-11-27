@@ -23,15 +23,16 @@
         const base = e.tolerancePosition === 'parentheses' ? label + ' (' + e.tolerance + ')' : label + ' ' + e.tolerance;
         return base + deviationText(e, nominal);
     };
-    // The tolerance designation is drawn at 60% of the dimension text height.
-    // A native MTEXT composition keeps the two runs together in the viewport and
-    // in SVG export while the plain `text` string remains authoritative.
+    // Only the numeric limit deviations are drawn at 60% of the dimension text
+    // height; the tolerance letter/grade keeps the normal height. A native MTEXT
+    // composition keeps the runs together in the viewport and in SVG export while
+    // the plain `text` string remains authoritative.
     const TOLERANCE_RATIO = .6;
     function withSmallTolerance(e, textObj, nominal) {
-        const tol = toleranceLabel(e, '', nominal);
-        if (!tol || !K.MText || !textObj.text.endsWith(tol)) return textObj;
+        const small = deviationText(e, nominal);
+        if (!small || !K.MText || !textObj.text.endsWith(small)) return textObj;
         try {
-            const bs = String.fromCharCode(92), rich = textObj.text.slice(0, -tol.length) + bs + 'H' + TOLERANCE_RATIO + 'x;' + tol, doc = owners.get(e), axes = G.textAxes(textObj);
+            const bs = String.fromCharCode(92), rich = textObj.text.slice(0, -small.length) + bs + 'H' + TOLERANCE_RATIO + 'x;' + small, doc = owners.get(e), axes = G.textAxes(textObj);
             const src = { type: 'MTEXT', text: rich, position: textObj.position, height: textObj.height, direction: textObj.direction, normal: textObj.normal, rotation: textObj.rotation, width: 0, attachment: 1 };
             let c = K.MText.compose(src, doc);
             // Attachment 1 is bottom-left; move the composition so the shared

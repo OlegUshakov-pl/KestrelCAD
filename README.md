@@ -8,7 +8,7 @@ Local-first 2D drafting and 3D modeling in plain HTML, CSS and JavaScript. A cus
 
 Branch builds are not the live site: changes merge into `main` before GitHub Pages publishes them. This is an original Kestrel application, not an Autodesk product or a feature-complete AutoCAD replacement — the honest boundaries are stated in each section below.
 
-**Current highlights:** parametric and assembly constraints, configurable blocks, native B-rep modeling, rich MTEXT/fields/search, source-faithful DXF exchange, and a manufacturing annotation toolset — dimension tolerances, GOST-style roughness symbols, numbered position callouts, rotate-by-reference points and right-click command repeat. Each addition keeps native `.kcad` persistence, atomic undo/redo, clipboard support and static DXF export.
+**Current highlights:** parametric and assembly constraints, configurable blocks, native B-rep modeling, rich MTEXT/fields/search, source-faithful DXF exchange, and a manufacturing annotation toolset — dimension text symbols, ISO 286 tolerance classes with numeric limit deviations, GOST-style roughness symbols, numbered position callouts, rotate-by-reference points and right-click command repeat. Each addition keeps native `.kcad` persistence, atomic undo/redo, clipboard support and static DXF export.
 
 ## Quick start
 
@@ -58,7 +58,11 @@ See [command-by-command review](docs/V2-REVIEW.md) for boundaries and known gaps
 
 ## Manufacturing drafting
 
-The **Drafting** ribbon tab adds machine-drawing annotations: dimension tolerances (`TOLERANCE`), four standard roughness symbols (`Ra 1.6` / `Ra 3.2` / `Ra 6.3` / `Ra 12.5`), numbered position callouts (`POSITION`) with circle/shelf and arrow/dot options, rotation by reference points (`ROTATEP`), and **Repeat: …** as the first item of the right-click menu (`REPEAT`). Tolerances display to the right of the dimension or in parentheses, follow associative geometry, and participate in FIND/REPLACE; roughness marks orient by the surface normal and can be mirrored; callout numbers auto-increment and can host associative fields. All objects persist in `.kcad`, undo atomically, copy through the clipboard, edit in the Properties panel and export to DXF as static geometry. [Workflows and limits](docs/MANUFACTURING.md).
+The **Drafting** ribbon tab adds machine-drawing annotations: dimension tolerances (`TOLERANCE`), four standard roughness symbols (`Ra 1.6` / `Ra 3.2` / `Ra 6.3` / `Ra 12.5`), numbered position callouts (`POSITION`) with circle/shelf and arrow/dot options, rotation by reference points (`ROTATEP`), and **Repeat: …** as the first item of the right-click menu (`REPEAT`).
+
+The `TOLERANCE` dialog on a selected dimension now also edits the text around the measured value: quick buttons insert **⌀ Ø R □** before and **± °** after (any other affix can be typed directly). Enter an ISO 286 class such as `H7` or `g6` and enable **Show numeric limit deviations** to append the calculated limits, for example `⌀40 H7 (+0.025/0)`. The letter/grade stays at the full dimension text height; only the numeric deviations are drawn at 60%. Limits are computed from the measured nominal size and the drawing units via `src/iso286.js` (tables ported from [weiniuyun/fit-calculator](https://github.com/weiniuyun/fit-calculator), ISO 286); angular dimensions and unsupported classes simply omit the numbers. The same switch is available in the Properties panel as **Numeric deviations**.
+
+Tolerances display to the right of the dimension or in parentheses, follow associative geometry, and participate in FIND/REPLACE; roughness marks use GOST-style proportions, orient by the surface normal and can be mirrored; callout numbers auto-increment and can host associative fields. All objects persist in `.kcad`, undo atomically, copy through the clipboard, edit in the Properties panel and export to DXF as static geometry. [Workflows and limits](docs/MANUFACTURING.md).
 
 ## Rich annotations: MTEXT, fields, search
 
@@ -117,7 +121,7 @@ python3 tools/verify.py --previews
 
 - Set `CHROMIUM_PATH` when Chromium is not at `/usr/bin/chromium`, and `KESTREL_TEST_URL=http://localhost:8642/` to test a served application instead of the standalone HTML. Fresh results land in `tests/results/`; `build-info.json` is generated during verification.
 - Playwright and ezdxf are test-only; CadQuery is an optional local modeling dependency, never downloaded by the browser.
-- Plain-Node suites (`tests/*.test.js`, run with `node tests/<name>.test.js`) cover fonts, mtext, constraints, blocks, manufacturing annotations and more; `tests/*.browser.py` drive the real UI through Playwright, and ezdxf audit scripts independently verify DXF exchange. The native browser suite exercises the actual localhost worker.
+- Plain-Node suites (`tests/*.test.js`, run with `node tests/<name>.test.js`) cover fonts, mtext, constraints, blocks, manufacturing annotations, ISO 286 limit deviations and the 60% tolerance text height (`tests/tolerance-height.test.js`), and more; `tests/*.browser.py` drive the real UI through Playwright, and ezdxf audit scripts independently verify DXF exchange. The native browser suite exercises the actual localhost worker.
 
 ## Source layout
 
@@ -125,6 +129,7 @@ python3 tools/verify.py --previews
 | --- | --- |
 | `src/math.js`, `geometry.js`, `model.js`, `csg.js`, `exchange.js`, `renderer.js` | Core geometry, persistence, rendering |
 | `src/production.js` (+ `-ui.js`) | Persistent drafting objects (v2) |
+| `src/iso286.js` | ISO 286 standard tolerance and limit-deviation tables used by dimension tolerances |
 | `src/kernel.js`, `native-*.js` (optional) | Local B-rep kernel bridge and ACIS adapters |
 | `src/constraints.js`, `spatial-constraints.js`, `dynamic-blocks.js` | Solver and block engines |
 | `src/fonts.js`, `mtext.js`, `fields.js`, `source-document.js`, `text-search.js` | Fonts, rich text, fields, source fidelity |
@@ -141,4 +146,4 @@ Data and fidelity: [Source documents](docs/SOURCE-DOCUMENTS.md) · [Exchange fid
 
 ## License
 
-The application source is MIT licensed. Optional third-party tools (CadQuery/OpenCascade, GNU LibreDWG) keep their own licenses and are never downloaded or bundled by the application.
+The application source is MIT licensed. Optional third-party tools (CadQuery/OpenCascade, GNU LibreDWG) keep their own licenses and are never downloaded or bundled by the application. The ISO 286 tolerance tables in `src/iso286.js` are ported from [weiniuyun/fit-calculator](https://github.com/weiniuyun/fit-calculator).
